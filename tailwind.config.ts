@@ -13,6 +13,10 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ["Plus Jakarta Sans", "system-ui", "sans-serif"],
+        serif: ["Fraunces", "Georgia", "serif"],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -57,6 +61,25 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        momentum: {
+          low: "hsl(var(--momentum-low))",
+          medium: "hsl(var(--momentum-medium))",
+          high: "hsl(var(--momentum-high))",
+        },
+        effort: {
+          1: "hsl(var(--effort-1))",
+          2: "hsl(var(--effort-2))",
+          3: "hsl(var(--effort-3))",
+          4: "hsl(var(--effort-4))",
+          5: "hsl(var(--effort-5))",
+        },
+        recovery: {
+          DEFAULT: "hsl(var(--recovery))",
+          foreground: "hsl(var(--recovery-foreground))",
+        },
+        success: {
+          glow: "hsl(var(--success-glow))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -65,25 +88,27 @@ export default {
       },
       keyframes: {
         "accordion-down": {
-          from: {
-            height: "0",
-          },
-          to: {
-            height: "var(--radix-accordion-content-height)",
-          },
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
         },
         "accordion-up": {
-          from: {
-            height: "var(--radix-accordion-content-height)",
-          },
-          to: {
-            height: "0",
-          },
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
+        },
+        "momentum-pulse": {
+          "0%, 100%": { transform: "scale(1)", opacity: "1" },
+          "50%": { transform: "scale(1.02)", opacity: "0.9" },
+        },
+        "gentle-bounce": {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-4px)" },
         },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "momentum-pulse": "momentum-pulse 2s ease-in-out infinite",
+        "gentle-bounce": "gentle-bounce 2s ease-in-out infinite",
       },
     },
   },
