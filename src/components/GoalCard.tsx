@@ -4,7 +4,32 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { MomentumRing } from './MomentumRing';
 import { Goal } from '@/types/goals';
-import { Calendar, Clock, Target, AlertCircle } from 'lucide-react';
+import { 
+  Calendar, 
+  Clock, 
+  Target, 
+  AlertCircle, 
+  MoreVertical, 
+  Trash2 
+} from 'lucide-react';
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { useGoals } from '@/hooks/useGoals';
+import { toast } from 'sonner';
 
 interface GoalCardProps {
   goal: Goal;
@@ -14,6 +39,9 @@ interface GoalCardProps {
 
 export function GoalCard({ goal, onLogEffort, onViewDetails }: GoalCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { deleteGoal } = useGoals();
 
   // Calculate days left
   const calculateDaysLeft = () => {
@@ -48,124 +76,191 @@ export function GoalCard({ goal, onLogEffort, onViewDetails }: GoalCardProps) {
     return Math.max(5, Math.min(100, (elapsed / goal.timeframe_days) * 100));
   };
 
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await deleteGoal.mutateAsync(goal.id);
+      // Success toast is handled in the mutation's onSuccess
+    } catch (error) {
+      console.error('Failed to delete goal:', error);
+      toast.error('Failed to delete goal. Please try again.');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteDialog(false);
+    }
+  };
+
   return (
-    <Card className="card-elevated hover:shadow-lg transition-shadow">
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <CardTitle className="font-serif text-xl line-clamp-1">
-            {goal.name}
-          </CardTitle>
-          <MomentumRing score={goal.momentum_score} size="sm" showLabel={false} />
-        </div>
-        
-        {goal.description && (
-          <p className="text-sm text-muted-foreground line-clamp-2">
-            {goal.description}
-          </p>
-        )}
-      </CardHeader>
-
-      <CardContent className="space-y-4">
-        {/* Countdown Display */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Time to completion</span>
-            </div>
-            <div className={`text-sm font-semibold ${getCountdownColor()}`}>
-              {isCountdownActive ? (
-                <>
-                  {daysLeft} {daysLeft === 1 ? 'day' : 'days'} left
-                </>
-              ) : goal.countdown_ended ? (
-                <span className="flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" />
-                  Time's up!
-                </span>
-              ) : (
-                'No countdown'
-              )}
-            </div>
-          </div>
-
-          {isCountdownActive && (
-            <>
-              <Progress 
-                value={getProgressPercentage()} 
-                className={`h-2 ${
-                  isUrgent ? 'bg-red-100' : 
-                  isWarning ? 'bg-amber-100' : 
-                  'bg-green-100'
-                }`}
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Started</span>
-                <span>
-                  {goal.target_completion_date && new Date(goal.target_completion_date).toLocaleDateString()}
-                </span>
-              </div>
-            </>
-          )}
+    <>
+      <Card className="card-elevated hover:shadow-lg transition-shadow relative">
+        {/* Three-dot menu in top-right corner */}
+        <div className="absolute top-4 right-4">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 hover:bg-muted"
+              >
+                <MoreVertical className="h-4 w-4" />
+                <span className="sr-only">Open menu</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem 
+                className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                onClick={() => setShowDeleteDialog(true)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Goal
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
-        {/* Goal Stats */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">Daily Effort</span>
-            </div>
-            <p className="font-medium">{goal.effort_per_day_minutes} min</p>
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between pr-8">
+            <CardTitle className="font-serif text-xl line-clamp-1">
+              {goal.name}
+            </CardTitle>
+            <MomentumRing score={goal.momentum_score} size="sm" showLabel={false} />
           </div>
           
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Target className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">Days/Week</span>
-            </div>
-            <p className="font-medium">{goal.days_per_week}</p>
-          </div>
-        </div>
-
-        {/* Total Logged */}
-        <div className="pt-2 border-t">
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-muted-foreground">Total logged</span>
-            <span className="font-medium">{goal.total_effort_logged} min</span>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-2 pt-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={onLogEffort}
-            className="flex-1"
-          >
-            Log Effort
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={onViewDetails}
-            className="flex-1"
-          >
-            Details
-          </Button>
-        </div>
-
-        {/* Urgent Warning */}
-        {isUrgent && isCountdownActive && (
-          <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg mt-2">
-            <p className="text-xs text-red-700 dark:text-red-300 text-center font-medium">
-              ⚠️ Only {daysLeft} day{daysLeft === 1 ? '' : 's'} left!
+          {goal.description && (
+            <p className="text-sm text-muted-foreground line-clamp-2">
+              {goal.description}
             </p>
+          )}
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          {/* Countdown Display */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Time to completion</span>
+              </div>
+              <div className={`text-sm font-semibold ${getCountdownColor()}`}>
+                {isCountdownActive ? (
+                  <>
+                    {daysLeft} {daysLeft === 1 ? 'day' : 'days'} left
+                  </>
+                ) : goal.countdown_ended ? (
+                  <span className="flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    Time's up!
+                  </span>
+                ) : (
+                  'No countdown'
+                )}
+              </div>
+            </div>
+
+            {isCountdownActive && (
+              <>
+                <Progress 
+                  value={getProgressPercentage()} 
+                  className={`h-2 ${
+                    isUrgent ? 'bg-red-100' : 
+                    isWarning ? 'bg-amber-100' : 
+                    'bg-green-100'
+                  }`}
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Started</span>
+                  <span>
+                    {goal.target_completion_date && new Date(goal.target_completion_date).toLocaleDateString()}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
-        )}
-      </CardContent>
-    </Card>
+
+          {/* Goal Stats */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">Daily Effort</span>
+              </div>
+              <p className="font-medium">{goal.effort_per_day_minutes} min</p>
+            </div>
+            
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Target className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm">Days/Week</span>
+              </div>
+              <p className="font-medium">{goal.days_per_week}</p>
+            </div>
+          </div>
+
+          {/* Total Logged */}
+          <div className="pt-2 border-t">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Total logged</span>
+              <span className="font-medium">{goal.total_effort_logged} min</span>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-2 pt-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={onLogEffort}
+              className="flex-1"
+            >
+              Log Effort
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={onViewDetails}
+              className="flex-1"
+            >
+              Details
+            </Button>
+          </div>
+
+          {/* Urgent Warning */}
+          {isUrgent && isCountdownActive && (
+            <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg mt-2">
+              <p className="text-xs text-red-700 dark:text-red-300 text-center font-medium">
+                ⚠️ Only {daysLeft} day{daysLeft === 1 ? '' : 's'} left!
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Goal</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {goal.name}? This is a permanent action.
+              <br />
+              <span className="font-semibold text-red-600">
+                All your progress with this goal will be lost if you proceed.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isDeleting ? 'Deleting...' : 'Delete Goal'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 

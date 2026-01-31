@@ -9,8 +9,6 @@ import { calculateFeasibility, FeasibilityResult } from '@/lib/feasibility';
 import { CreateGoalData } from '@/types/goals';
 import { useGoals } from '@/hooks/useGoals';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 
 interface CreateGoalDialogProps {
   open: boolean;
@@ -18,7 +16,6 @@ interface CreateGoalDialogProps {
 }
 
 export function CreateGoalDialog({ open, onOpenChange }: CreateGoalDialogProps) {
-  const { user } = useAuth();
   const { createGoal } = useGoals();
   
   const [formData, setFormData] = useState<CreateGoalData>({
@@ -31,6 +28,7 @@ export function CreateGoalDialog({ open, onOpenChange }: CreateGoalDialogProps) 
   
   const [feasibility, setFeasibility] = useState<FeasibilityResult | null>(null);
   const [step, setStep] = useState<'details' | 'feasibility'>('details');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (formData.name) {
@@ -44,43 +42,30 @@ export function CreateGoalDialog({ open, onOpenChange }: CreateGoalDialogProps) 
       return;
     }
 
-    if (!user) {
-      toast.error('You must be logged in to create a goal');
-      return;
-    }
-
-    // Calculate target completion date
-    const today = new Date();
-    const targetDate = new Date();
-    targetDate.setDate(today.getDate() + formData.timeframe_days);
+    setIsSubmitting(true);
 
     try {
-      const { error } = await supabase
-        .from('goals')
-        .insert({
-          name: formData.name,
-          description: formData.description || null,
-          timeframe_days: formData.timeframe_days,
-          effort_per_day_minutes: formData.effort_per_day_minutes,
-          days_per_week: formData.days_per_week,
-          target_completion_date: targetDate.toISOString().split('T')[0], // YYYY-MM-DD
-          countdown_active: true,
-          countdown_ended: false,
-          accountability_prompt_shown: false,
-          user_id: user.id,
-        });
+      // Calculate feasibility score
+      const feasibility = calculateFeasibility(formData);
+      
+      // Create the goal using the hook's mutation
+      await createGoal.mutateAsync({
+        ...formData,
+        // Ensure timeframe_days is properly set
+        timeframe_days: formData.timeframe_days,
+      });
 
-      if (error) {
-        console.error('Error creating goal:', error);
-        toast.error('Failed to create goal');
-        return;
-      }
-
-      toast.success(`Goal created! Countdown started - ${formData.timeframe_days} days to complete.`);
-      onOpenChange(false);
+      // Success toast is handled in the mutation's onSuccess
+      // Reset form and close dialog
       resetForm();
-    } catch (error) {
-      toast.error('Failed to create goal');
+      onOpenChange(false);
+      
+    } catch (error: any) {
+      // Error toast is already handled in the mutation's onError
+      console.error('Failed to create goal:', error);
+      // Don't close dialog on error so user can fix and retry
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -99,6 +84,7 @@ export function CreateGoalDialog({ open, onOpenChange }: CreateGoalDialogProps) 
       days_per_week: 5,
     });
     setStep('details');
+    setIsSubmitting(false);
   };
 
   return (
@@ -235,8 +221,9 @@ export function CreateGoalDialog({ open, onOpenChange }: CreateGoalDialogProps) 
               <Button 
                 onClick={handleSubmit}
                 className="flex-1"
+                disabled={isSubmitting}
               >
-                Create Goal & Start Countdown
+                {isSubmitting ? 'Creating Goal...' : 'Create Goal & Start Countdown'}
               </Button>
             </div>
           </div>

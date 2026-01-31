@@ -5,6 +5,7 @@ import { Goal, GoalLog, Reflection, CreateGoalData, LogEffortData, ReflectionDat
 import { calculateFeasibility } from '@/lib/feasibility';
 import { calculateMomentumAfterLog, calculateMomentumAfterMiss } from '@/lib/momentum';
 import { differenceInDays, parseISO, format } from 'date-fns';
+import { toast } from 'sonner';
 
 export function useGoals() {
   const { user } = useAuth();
@@ -15,13 +16,18 @@ export function useGoals() {
     queryKey: ['goals', user?.id],
     queryFn: async () => {
       if (!user) return [];
+      console.log('Fetching goals for user:', user.id);
       const { data, error } = await supabase
         .from('goals')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching goals:', error);
+        throw error;
+      }
+      console.log('Fetched goals:', data?.length || 0);
       return data as Goal[];
     },
     enabled: !!user,
@@ -46,78 +52,101 @@ export function useGoals() {
     });
   };
 
-// Create a new goal
+  // Create a new goal - MINIMAL SAFE VERSION
+  // Update just the createGoal mutation in your useGoals.ts file
 const createGoal = useMutation({
   mutationFn: async (goalData: CreateGoalData) => {
-    console.log('Starting goal creation for user:', user?.id);
+    console.log('Creating goal with data:', goalData);
     
     if (!user) {
-      console.error('No user found - not authenticated');
+      console.error('User not authenticated');
       throw new Error('Not authenticated');
     }
 
+    // Calculate feasibility
+    let feasibility;
     try {
-      // Calculate feasibility
-      const feasibility = calculateFeasibility(goalData);
-      console.log('Feasibility calculated:', feasibility.score);
-      
-      // Calculate target completion date
-      const today = new Date();
-      const targetDate = new Date();
-      targetDate.setDate(today.getDate() + goalData.timeframe_days);
-      const targetDateString = targetDate.toISOString().split('T')[0];
-      
-      console.log('Inserting goal with data:', {
-        user_id: user.id,
-        name: goalData.name,
-        timeframe_days: goalData.timeframe_days,
-        target_completion_date: targetDateString
-      });
-      
-      const { data, error } = await supabase
-        .from('goals')
-        .insert({
-          user_id: user.id,
-          name: goalData.name,
-          description: goalData.description || null,
-          timeframe_days: goalData.timeframe_days,
-          effort_per_day_minutes: goalData.effort_per_day_minutes,
-          days_per_week: goalData.days_per_week,
-          feasibility_score: feasibility.score,
-          // NEW: Countdown fields
-          target_completion_date: targetDateString,
-          countdown_active: true,
-          countdown_ended: false,
-          accountability_prompt_shown: false,
-          // NEW: For 24-hour cooldown
-          last_log_date: null,
-        })
-        .select()
-        .single();
-      
-      if (error) {
-        console.error('Supabase insert error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
-        throw error;
-      }
-      
-      console.log('Goal created successfully:', data.id);
-      return data as Goal;
+      feasibility = calculateFeasibility(goalData);
+      console.log('Calculated feasibility:', feasibility);
     } catch (error) {
-      console.error('Error in createGoal mutation:', error);
-      throw error;
+      console.error('Error calculating feasibility:', error);
+      throw new Error(`Failed to calculate feasibility: ${error}`);
     }
+    
+    // Calculate target completion date
+    const today = new Date();
+    const targetDate = new Date();
+    targetDate.setDate(today.getDate() + goalData.timeframe_days);
+    
+    // NOW WITH ALL COLUMNS SINCE THEY EXIST IN YOUR DATABASE
+    const goalToInsert = {
+      user_id: user.id,
+      name: goalData.name,
+      description: goalData.description || null,
+      timeframe_days: goalData.timeframe_days,
+      effort_per_day_minutes: goalData.effort_per_day_minutes,
+      days_per_week: goalData.days_per_week,
+      feasibility_score: feasibility.score,
+      
+      // Countdown system columns
+      target_completion_date: targetDate.toISOString().split('T')[0],
+      days_remaining: goalData.timeframe_days, // Now this column exists!
+      countdown_active: true,
+      countdown_ended: false,
+      accountability_prompt_shown: false,
+      
+      // 24-hour cooldown system
+      last_log_date: null, // Now this column exists!
+      
+      // Momentum system columns
+      momentum_score: 50,
+      current_difficulty_multiplier: 1.0,
+      consecutive_successes: 0,
+      consecutive_misses: 0,
+      in_recovery_mode: false,
+      recovery_start_date: null,
+      total_effort_logged: 0,
+      
+      // Basic fields
+      status: 'active' as const,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    console.log('Inserting goal with all columns:', goalToInsert);
+    
+    const { data, error } = await supabase
+      .from('goals')
+      .insert(goalToInsert)
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Supabase insert error:', error);
+      throw new Error(`Failed to create goal: ${error.message}`);
+    }
+    
+    console.log('Goal created successfully:', data);
+    return data as Goal;
   },
-  onSuccess: () => {
-    console.log('Invalidating goals query cache');
-    queryClient.invalidateQueries({ queryKey: ['goals'] });
+  onSuccess: (newGoal) => {
+    console.log('Mutation successful, updating cache for user:', user?.id);
+    
+    // Update cache immediately for instant UI update
+    queryClient.setQueryData(['goals', user?.id], (oldGoals: Goal[] | undefined) => {
+      const updatedGoals = oldGoals ? [newGoal, ...oldGoals] : [newGoal];
+      console.log('Updated cache with new goal. Total goals:', updatedGoals.length);
+      return updatedGoals;
+    });
+    
+    // Invalidate queries to ensure fresh data
+    queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
+    
+    toast.success('Goal created successfully!');
   },
   onError: (error) => {
-    console.error('Mutation failed with error:', error);
+    console.error('Mutation error:', error);
+    toast.error(error.message || 'Failed to create goal. Please try again.');
   },
 });
 
@@ -188,7 +217,7 @@ const createGoal = useMutation({
       return { success: true, message: update.message };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['goal-logs'] });
     },
   });
@@ -241,7 +270,7 @@ const createGoal = useMutation({
       return { success: true, message: update.message };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
     },
   });
 
@@ -256,7 +285,7 @@ const createGoal = useMutation({
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
     },
   });
 
@@ -271,7 +300,7 @@ const createGoal = useMutation({
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
     },
   });
 
