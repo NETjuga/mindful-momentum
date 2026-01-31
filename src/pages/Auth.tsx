@@ -9,20 +9,23 @@ import { Leaf } from 'lucide-react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
+// Update the authSchema
 const authSchema = z.object({
   email: z.string().email('Please enter a valid email'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
+  name: z.string().min(2, 'Name must be at least 2 characters').optional(),
 });
 
 export default function Auth() {
   const navigate = useNavigate();
   const { signIn, signUp, user } = useAuth();
   
+  const [name, setName] = useState('');
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string; name?: string }>({});
 
   // Redirect if already logged in
   if (user) {
@@ -30,13 +33,19 @@ export default function Auth() {
     return null;
   }
 
+  // Update the validate function
   const validate = () => {
-    const result = authSchema.safeParse({ email, password });
+    const data = isLogin 
+      ? { email, password }
+      : { email, password, name };
+    
+    const result = authSchema.safeParse(data);
     if (!result.success) {
-      const fieldErrors: { email?: string; password?: string } = {};
+      const fieldErrors: { email?: string; password?: string; name?: string } = {};
       result.error.errors.forEach((err) => {
         if (err.path[0] === 'email') fieldErrors.email = err.message;
         if (err.path[0] === 'password') fieldErrors.password = err.message;
+        if (err.path[0] === 'name') fieldErrors.name = err.message;
       });
       setErrors(fieldErrors);
       return false;
@@ -68,7 +77,8 @@ export default function Auth() {
         toast.success('Welcome back!');
         navigate('/');
       } else {
-        const { error } = await signUp(email, password);
+        // Pass the name to signUp function
+        const { error } = await signUp(email, password, name);
         if (error) {
           if (error.message.includes('User already registered')) {
             toast.error('An account with this email already exists');
@@ -124,6 +134,24 @@ export default function Auth() {
                 )}
               </div>
 
+              {/* Add Name Field for Sign Up */}
+              {!isLogin && (
+                <div className="space-y-2">
+                  <Label htmlFor="name">Full Name</Label>
+                  <Input
+                    id="name"
+                    type="text"
+                    placeholder="John Doe"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    disabled={loading}
+                  />
+                  {errors.name && (
+                    <p className="text-sm text-destructive">{errors.name}</p>
+                  )}
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <Input
@@ -152,6 +180,7 @@ export default function Auth() {
                 onClick={() => {
                   setIsLogin(!isLogin);
                   setErrors({});
+                  setName(''); // Clear name when switching modes
                 }}
                 className="text-sm text-muted-foreground hover:text-primary transition-colors"
               >

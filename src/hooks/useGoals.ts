@@ -46,12 +46,33 @@ export function useGoals() {
     });
   };
 
-  // Create a new goal
-  const createGoal = useMutation({
-    mutationFn: async (goalData: CreateGoalData) => {
-      if (!user) throw new Error('Not authenticated');
+// Create a new goal
+const createGoal = useMutation({
+  mutationFn: async (goalData: CreateGoalData) => {
+    console.log('Starting goal creation for user:', user?.id);
+    
+    if (!user) {
+      console.error('No user found - not authenticated');
+      throw new Error('Not authenticated');
+    }
 
+    try {
+      // Calculate feasibility
       const feasibility = calculateFeasibility(goalData);
+      console.log('Feasibility calculated:', feasibility.score);
+      
+      // Calculate target completion date
+      const today = new Date();
+      const targetDate = new Date();
+      targetDate.setDate(today.getDate() + goalData.timeframe_days);
+      const targetDateString = targetDate.toISOString().split('T')[0];
+      
+      console.log('Inserting goal with data:', {
+        user_id: user.id,
+        name: goalData.name,
+        timeframe_days: goalData.timeframe_days,
+        target_completion_date: targetDateString
+      });
       
       const { data, error } = await supabase
         .from('goals')
@@ -63,17 +84,42 @@ export function useGoals() {
           effort_per_day_minutes: goalData.effort_per_day_minutes,
           days_per_week: goalData.days_per_week,
           feasibility_score: feasibility.score,
+          // NEW: Countdown fields
+          target_completion_date: targetDateString,
+          countdown_active: true,
+          countdown_ended: false,
+          accountability_prompt_shown: false,
+          // NEW: For 24-hour cooldown
+          last_log_date: null,
         })
         .select()
         .single();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase insert error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        throw error;
+      }
+      
+      console.log('Goal created successfully:', data.id);
       return data as Goal;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['goals'] });
-    },
-  });
+    } catch (error) {
+      console.error('Error in createGoal mutation:', error);
+      throw error;
+    }
+  },
+  onSuccess: () => {
+    console.log('Invalidating goals query cache');
+    queryClient.invalidateQueries({ queryKey: ['goals'] });
+  },
+  onError: (error) => {
+    console.error('Mutation failed with error:', error);
+  },
+});
 
   // Log effort for a goal
   const logEffort = useMutation({

@@ -9,6 +9,8 @@ import { calculateFeasibility, FeasibilityResult } from '@/lib/feasibility';
 import { CreateGoalData } from '@/types/goals';
 import { useGoals } from '@/hooks/useGoals';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface CreateGoalDialogProps {
   open: boolean;
@@ -16,6 +18,7 @@ interface CreateGoalDialogProps {
 }
 
 export function CreateGoalDialog({ open, onOpenChange }: CreateGoalDialogProps) {
+  const { user } = useAuth();
   const { createGoal } = useGoals();
   
   const [formData, setFormData] = useState<CreateGoalData>({
@@ -41,9 +44,39 @@ export function CreateGoalDialog({ open, onOpenChange }: CreateGoalDialogProps) 
       return;
     }
 
+    if (!user) {
+      toast.error('You must be logged in to create a goal');
+      return;
+    }
+
+    // Calculate target completion date
+    const today = new Date();
+    const targetDate = new Date();
+    targetDate.setDate(today.getDate() + formData.timeframe_days);
+
     try {
-      await createGoal.mutateAsync(formData);
-      toast.success('Goal created! Let\'s build some momentum.');
+      const { error } = await supabase
+        .from('goals')
+        .insert({
+          name: formData.name,
+          description: formData.description || null,
+          timeframe_days: formData.timeframe_days,
+          effort_per_day_minutes: formData.effort_per_day_minutes,
+          days_per_week: formData.days_per_week,
+          target_completion_date: targetDate.toISOString().split('T')[0], // YYYY-MM-DD
+          countdown_active: true,
+          countdown_ended: false,
+          accountability_prompt_shown: false,
+          user_id: user.id,
+        });
+
+      if (error) {
+        console.error('Error creating goal:', error);
+        toast.error('Failed to create goal');
+        return;
+      }
+
+      toast.success(`Goal created! Countdown started - ${formData.timeframe_days} days to complete.`);
       onOpenChange(false);
       resetForm();
     } catch (error) {
@@ -155,6 +188,15 @@ export function CreateGoalDialog({ open, onOpenChange }: CreateGoalDialogProps) 
               </div>
             </div>
 
+            {/* Countdown Preview */}
+            <div className="p-3 bg-muted/30 rounded-lg mt-2">
+              <p className="text-sm font-medium">Countdown Preview</p>
+              <p className="text-sm text-muted-foreground">
+                You'll have <span className="font-semibold">{formData.timeframe_days} days</span> to complete this goal.
+                The countdown starts immediately when you create it.
+              </p>
+            </div>
+
             <div className="flex gap-3 pt-4">
               <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
                 Cancel
@@ -192,10 +234,9 @@ export function CreateGoalDialog({ open, onOpenChange }: CreateGoalDialogProps) 
               </Button>
               <Button 
                 onClick={handleSubmit}
-                disabled={createGoal.isPending}
                 className="flex-1"
               >
-                {createGoal.isPending ? 'Creating...' : 'Create Goal'}
+                Create Goal & Start Countdown
               </Button>
             </div>
           </div>
