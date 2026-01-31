@@ -20,7 +20,9 @@ export interface Goal {
   total_effort_logged: number;
   created_at: string;
   updated_at: string;
-  
+  last_log_date: string | null; 
+
+
   // NEW: Countdown accountability fields
   target_completion_date: string | null;
   countdown_active: boolean;

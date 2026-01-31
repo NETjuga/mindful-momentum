@@ -53,118 +53,180 @@ export function useGoals() {
   };
 
   // Create a new goal - MINIMAL SAFE VERSION
-  // Update just the createGoal mutation in your useGoals.ts file
-const createGoal = useMutation({
-  mutationFn: async (goalData: CreateGoalData) => {
-    console.log('Creating goal with data:', goalData);
-    
-    if (!user) {
-      console.error('User not authenticated');
-      throw new Error('Not authenticated');
-    }
+  const createGoal = useMutation({
+    mutationFn: async (goalData: CreateGoalData) => {
+      console.log('Creating goal with data:', goalData);
+      
+      if (!user) {
+        console.error('User not authenticated');
+        throw new Error('Not authenticated');
+      }
 
-    // Calculate feasibility
-    let feasibility;
-    try {
-      feasibility = calculateFeasibility(goalData);
-      console.log('Calculated feasibility:', feasibility);
-    } catch (error) {
-      console.error('Error calculating feasibility:', error);
-      throw new Error(`Failed to calculate feasibility: ${error}`);
-    }
-    
-    // Calculate target completion date
-    const today = new Date();
-    const targetDate = new Date();
-    targetDate.setDate(today.getDate() + goalData.timeframe_days);
-    
-    // NOW WITH ALL COLUMNS SINCE THEY EXIST IN YOUR DATABASE
-    const goalToInsert = {
-      user_id: user.id,
-      name: goalData.name,
-      description: goalData.description || null,
-      timeframe_days: goalData.timeframe_days,
-      effort_per_day_minutes: goalData.effort_per_day_minutes,
-      days_per_week: goalData.days_per_week,
-      feasibility_score: feasibility.score,
+      // Calculate feasibility
+      let feasibility;
+      try {
+        feasibility = calculateFeasibility(goalData);
+        console.log('Calculated feasibility:', feasibility);
+      } catch (error) {
+        console.error('Error calculating feasibility:', error);
+        throw new Error(`Failed to calculate feasibility: ${error}`);
+      }
       
-      // Countdown system columns
-      target_completion_date: targetDate.toISOString().split('T')[0],
-      days_remaining: goalData.timeframe_days, // Now this column exists!
-      countdown_active: true,
-      countdown_ended: false,
-      accountability_prompt_shown: false,
+      // Calculate target completion date
+      const today = new Date();
+      const targetDate = new Date();
+      targetDate.setDate(today.getDate() + goalData.timeframe_days);
       
-      // 24-hour cooldown system
-      last_log_date: null, // Now this column exists!
-      
-      // Momentum system columns
-      momentum_score: 50,
-      current_difficulty_multiplier: 1.0,
-      consecutive_successes: 0,
-      consecutive_misses: 0,
-      in_recovery_mode: false,
-      recovery_start_date: null,
-      total_effort_logged: 0,
-      
-      // Basic fields
-      status: 'active' as const,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+      // NOW WITH ALL COLUMNS SINCE THEY EXIST IN YOUR DATABASE
+      const goalToInsert = {
+        user_id: user.id,
+        name: goalData.name,
+        description: goalData.description || null,
+        timeframe_days: goalData.timeframe_days,
+        effort_per_day_minutes: goalData.effort_per_day_minutes,
+        days_per_week: goalData.days_per_week,
+        feasibility_score: feasibility.score,
+        
+        // Countdown system columns
+        target_completion_date: targetDate.toISOString().split('T')[0],
+        days_remaining: goalData.timeframe_days, // Now this column exists!
+        countdown_active: true,
+        countdown_ended: false,
+        accountability_prompt_shown: false,
+        
+        // 12-hour cooldown system
+        last_log_date: null, // Now this column exists!
+        
+        // Momentum system columns
+        momentum_score: 50,
+        current_difficulty_multiplier: 1.0,
+        consecutive_successes: 0,
+        consecutive_misses: 0,
+        in_recovery_mode: false,
+        recovery_start_date: null,
+        total_effort_logged: 0,
+        
+        // Basic fields
+        status: 'active' as const,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
 
-    console.log('Inserting goal with all columns:', goalToInsert);
-    
-    const { data, error } = await supabase
-      .from('goals')
-      .insert(goalToInsert)
-      .select()
-      .single();
-    
-    if (error) {
-      console.error('Supabase insert error:', error);
-      throw new Error(`Failed to create goal: ${error.message}`);
-    }
-    
-    console.log('Goal created successfully:', data);
-    return data as Goal;
-  },
-  onSuccess: (newGoal) => {
-    console.log('Mutation successful, updating cache for user:', user?.id);
-    
-    // Update cache immediately for instant UI update
-    queryClient.setQueryData(['goals', user?.id], (oldGoals: Goal[] | undefined) => {
-      const updatedGoals = oldGoals ? [newGoal, ...oldGoals] : [newGoal];
-      console.log('Updated cache with new goal. Total goals:', updatedGoals.length);
-      return updatedGoals;
-    });
-    
-    // Invalidate queries to ensure fresh data
-    queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
-    
-    toast.success('Goal created successfully!');
-  },
-  onError: (error) => {
-    console.error('Mutation error:', error);
-    toast.error(error.message || 'Failed to create goal. Please try again.');
-  },
-});
+      console.log('Inserting goal with all columns:', goalToInsert);
+      
+      const { data, error } = await supabase
+        .from('goals')
+        .insert(goalToInsert)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Supabase insert error:', error);
+        throw new Error(`Failed to create goal: ${error.message}`);
+      }
+      
+      console.log('Goal created successfully:', data);
+      return data as Goal;
+    },
+    onSuccess: (newGoal) => {
+      console.log('Mutation successful, updating cache for user:', user?.id);
+      
+      // Update cache immediately for instant UI update
+      queryClient.setQueryData(['goals', user?.id], (oldGoals: Goal[] | undefined) => {
+        const updatedGoals = oldGoals ? [newGoal, ...oldGoals] : [newGoal];
+        console.log('Updated cache with new goal. Total goals:', updatedGoals.length);
+        return updatedGoals;
+      });
+      
+      // Invalidate queries to ensure fresh data
+      queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
+      
+      toast.success('Goal created successfully!');
+    },
+    onError: (error) => {
+      console.error('Mutation error:', error);
+      toast.error(error.message || 'Failed to create goal. Please try again.');
+    },
+  });
 
-  // Log effort for a goal
   const logEffort = useMutation({
     mutationFn: async (logData: LogEffortData) => {
       if (!user) throw new Error('Not authenticated');
 
-      // Get the goal
+      console.log('🔴 DEBUG: Starting log effort for goal:', logData.goal_id);
+
+      // Get the goal with its last_log_date
       const { data: goal, error: goalError } = await supabase
         .from('goals')
         .select('*')
         .eq('id', logData.goal_id)
         .single();
       
-      if (goalError) throw goalError;
+      if (goalError) {
+        console.error('🔴 DEBUG: Error fetching goal:', goalError);
+        throw goalError;
+      }
 
-      // Get the last log
+      const typedGoal = goal as Goal;
+      console.log('🔴 DEBUG: Goal from DB - last_log_date:', typedGoal.last_log_date);
+
+      // ================== COOLDOWN CHECK ==================
+if (typedGoal.last_log_date) {
+  console.log('🔴 DEBUG: last_log_date exists, checking cooldown...');
+  console.log('🔴 DEBUG: Raw last_log_date:', typedGoal.last_log_date);
+  console.log('🔴 DEBUG: Type:', typeof typedGoal.last_log_date);
+  console.log('🔴 DEBUG: Length:', typedGoal.last_log_date.length);
+  
+  let lastLog: Date;
+  
+  // Handle different date formats
+  if (typeof typedGoal.last_log_date === 'string') {
+    if (typedGoal.last_log_date.length === 10) {
+      // Format: "YYYY-MM-DD" (date only) - add time
+      console.log('🔴 DEBUG: Date-only format detected');
+      lastLog = new Date(typedGoal.last_log_date + 'T12:00:00.000Z');
+    } else if (typedGoal.last_log_date.includes('T')) {
+      // Format: ISO string with time
+      console.log('🔴 DEBUG: ISO format detected');
+      lastLog = new Date(typedGoal.last_log_date);
+    } else {
+      // Unknown format, try to parse anyway
+      console.log('🔴 DEBUG: Unknown format, trying to parse');
+      lastLog = new Date(typedGoal.last_log_date);
+    }
+  } else {
+    // Already a Date object or something else
+    lastLog = new Date(typedGoal.last_log_date);
+  }
+  
+  console.log('🔴 DEBUG: Parsed lastLog:', lastLog.toISOString());
+  
+  const now = new Date();
+  const hoursSinceLastLog = (now.getTime() - lastLog.getTime()) / (1000 * 60 * 60);
+  
+  console.log('🔴 DEBUG: hoursSinceLastLog:', hoursSinceLastLog);
+  
+  if (hoursSinceLastLog < 12) {
+    console.log('🔴 DEBUG: COOLDOWN ACTIVE! Throwing error...');
+    const nextLogTime = new Date(lastLog.getTime() + 12 * 60 * 60 * 1000);
+    const timeUntilNextLog = nextLogTime.getTime() - now.getTime();
+    
+    const hours = Math.floor(timeUntilNextLog / (1000 * 60 * 60));
+    const minutes = Math.floor((timeUntilNextLog % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((timeUntilNextLog % (1000 * 60)) / 1000);
+    
+    const timeMessage = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    
+    throw new Error(`COOLDOWN:${timeMessage}:${nextLogTime.toISOString()}`);
+  } else {
+    console.log('🔴 DEBUG: Cooldown passed, allowing log');
+  }
+} else {
+  console.log('🔴 DEBUG: No last_log_date, allowing log');
+}
+// ================== END COOLDOWN CHECK ==================
+
+      // Get the last log from goal_logs table for momentum calculation
       const { data: lastLogs } = await supabase
         .from('goal_logs')
         .select('log_date')
@@ -179,7 +241,7 @@ const createGoal = useMutation({
         : 1;
 
       // Calculate momentum update
-      const update = calculateMomentumAfterLog(goal as Goal, logData.effort_rating, daysSinceLastLog);
+      const update = calculateMomentumAfterLog(typedGoal, logData.effort_rating, daysSinceLastLog);
 
       // Insert the log
       const { error: logError } = await supabase
@@ -198,7 +260,10 @@ const createGoal = useMutation({
       
       if (logError) throw logError;
 
-      // Update the goal
+      // Update the goal with new last_log_date
+      const newLastLogDate = new Date().toISOString();
+      console.log('🔴 DEBUG: Setting last_log_date to:', newLastLogDate);
+      
       const { error: updateError } = await supabase
         .from('goals')
         .update({
@@ -206,17 +271,28 @@ const createGoal = useMutation({
           current_difficulty_multiplier: update.newDifficultyMultiplier,
           consecutive_successes: update.newConsecutiveSuccesses,
           consecutive_misses: update.newConsecutiveMisses,
-          in_recovery_mode: update.shouldExitRecovery ? false : goal.in_recovery_mode,
-          recovery_start_date: update.shouldExitRecovery ? null : goal.recovery_start_date,
-          total_effort_logged: (goal.total_effort_logged || 0) + 1,
-        })
+          in_recovery_mode: update.shouldExitRecovery ? false : typedGoal.in_recovery_mode,
+          recovery_start_date: update.shouldExitRecovery ? null : typedGoal.recovery_start_date,
+          total_effort_logged: (typedGoal.total_effort_logged || 0) + 1,
+          last_log_date: newLastLogDate, // Update the cooldown timer
+        } as any) // FIX: Add "as any" to bypass TypeScript error
         .eq('id', logData.goal_id);
       
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('🔴 DEBUG: Error updating goal:', updateError);
+        throw updateError;
+      }
 
-      return { success: true, message: update.message };
+      console.log('🔴 DEBUG: Update successful!');
+      
+      return { 
+        success: true, 
+        message: update.message || 'Effort logged!',
+        nextLogTime: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
+      };
     },
     onSuccess: () => {
+      console.log('🔴 DEBUG: Mutation onSuccess called');
       queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['goal-logs'] });
     },
