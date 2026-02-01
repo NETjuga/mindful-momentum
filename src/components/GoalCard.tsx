@@ -1,3 +1,4 @@
+// src/components/GoalCard.tsx
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,7 +11,8 @@ import {
   Target, 
   AlertCircle, 
   MoreVertical, 
-  Trash2 
+  Trash2,
+  History
 } from 'lucide-react';
 import { 
   DropdownMenu,
@@ -30,6 +32,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useGoals } from '@/hooks/useGoals';
 import { toast } from 'sonner';
+import { GoalLogHistoryDialog } from './GoalLogHistoryDialog';
 
 interface GoalCardProps {
   goal: Goal;
@@ -38,8 +41,8 @@ interface GoalCardProps {
 }
 
 export function GoalCard({ goal, onLogEffort, onViewDetails }: GoalCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showLogHistory, setShowLogHistory] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const { deleteGoal } = useGoals();
 
@@ -90,6 +93,18 @@ export function GoalCard({ goal, onLogEffort, onViewDetails }: GoalCardProps) {
     }
   };
 
+  // Get difficulty badge styling (for log history preview)
+  const getDifficultyColor = (difficulty: string) => {
+    switch (difficulty.toLowerCase()) {
+      case 'minimal': return 'bg-gray-100 text-gray-800 border-gray-300';
+      case 'light': return 'bg-green-50 text-green-800 border-green-300';
+      case 'moderate': return 'bg-blue-50 text-blue-800 border-blue-300';
+      case 'strong': return 'bg-orange-50 text-orange-800 border-orange-300';
+      case 'maximum': return 'bg-red-50 text-red-800 border-red-300';
+      default: return 'bg-gray-100 text-gray-800 border-gray-300';
+    }
+  };
+
   return (
     <>
       <Card className="card-elevated hover:shadow-lg transition-shadow relative">
@@ -107,6 +122,13 @@ export function GoalCard({ goal, onLogEffort, onViewDetails }: GoalCardProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem 
+                onClick={() => setShowLogHistory(true)}
+                className="flex items-center gap-2"
+              >
+                <History className="h-4 w-4" />
+                View Log History
+              </DropdownMenuItem>
               <DropdownMenuItem 
                 className="text-red-600 focus:text-red-600 focus:bg-red-50"
                 onClick={() => setShowDeleteDialog(true)}
@@ -196,6 +218,40 @@ export function GoalCard({ goal, onLogEffort, onViewDetails }: GoalCardProps) {
             </div>
           </div>
 
+          {/* Last Log Info - Show even if no logs exist */}
+          <div className="pt-2 border-t">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">
+                  {goal.log_history && goal.log_history.length > 0 ? 'Recent effort' : 'Effort history'}
+                </p>
+                {goal.log_history && goal.log_history.length > 0 ? (
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getDifficultyColor(goal.log_history[0].difficulty || 'moderate')}`}>
+                      {(goal.log_history[0].difficulty || 'moderate').charAt(0).toUpperCase() + (goal.log_history[0].difficulty || 'moderate').slice(1)}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(goal.log_history[0].timestamp || goal.log_history[0].created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No logs yet. Start tracking your progress!
+                  </p>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowLogHistory(true)}
+                className="flex items-center gap-1 text-sm"
+              >
+                <History className="h-3 w-3" />
+                View History
+              </Button>
+            </div>
+          </div>
+
           {/* Total Logged */}
           <div className="pt-2 border-t">
             <div className="flex justify-between items-center">
@@ -217,9 +273,10 @@ export function GoalCard({ goal, onLogEffort, onViewDetails }: GoalCardProps) {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={onViewDetails}
-              className="flex-1"
+              onClick={() => setShowLogHistory(true)}
+              className="flex-1 flex items-center gap-1"
             >
+              <History className="h-3 w-3" />
               Details
             </Button>
           </div>
@@ -234,6 +291,14 @@ export function GoalCard({ goal, onLogEffort, onViewDetails }: GoalCardProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Log History Dialog */}
+      <GoalLogHistoryDialog
+        open={showLogHistory}
+        onOpenChange={setShowLogHistory}
+        goal={goal}
+        logs={goal.log_history || []}
+      />
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
@@ -263,4 +328,3 @@ export function GoalCard({ goal, onLogEffort, onViewDetails }: GoalCardProps) {
     </>
   );
 }
-

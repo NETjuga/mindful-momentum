@@ -11,46 +11,122 @@ export function useGoals() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  // Fetch all goals for the user
-  const goalsQuery = useQuery({
-    queryKey: ['goals', user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-      console.log('Fetching goals for user:', user.id);
-      const { data, error } = await supabase
-        .from('goals')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+// Fetch all goals for the user WITH LOGS
+const goalsQuery = useQuery({
+  queryKey: ['goals', user?.id],
+  queryFn: async () => {
+    if (!user) return [];
+    console.log('Fetching goals with logs for user:', user.id);
+    
+    // NEW: Fetch goals with their associated logs
+    const { data, error } = await supabase
+      .from('goals')
+      .select(`
+        *,
+        goal_logs (*)
+      `)
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching goals with logs:', error);
+      throw error;
+    }
+    
+    console.log('Fetched goals with logs:', data?.length || 0);
+    
+    // Transform the data to match your Goal type
+    const goalsWithLogs = (data || []).map(goal => {
+      // Cast goal to any to access the new fields
+      const typedGoal = goal as any;
       
-      if (error) {
-        console.error('Error fetching goals:', error);
-        throw error;
-      }
-      console.log('Fetched goals:', data?.length || 0);
-      return data as Goal[];
-    },
-    enabled: !!user,
-  });
+      // Ensure log_history is populated with enhanced fields
+      const enhancedLogs = (typedGoal.goal_logs || []).map((log: any) => ({
+        ...log,
+        // Make sure enhanced fields exist with proper fallbacks
+        difficulty: log.difficulty || null,
+        feel_option: log.feel_option || null,
+        message: log.message || null,
+        // Ensure timestamp exists (use created_at as fallback)
+        timestamp: log.timestamp || log.created_at,
+        // Include all existing fields
+        id: log.id,
+        goal_id: log.goal_id,
+        user_id: log.user_id,
+        log_date: log.log_date,
+        effort_rating: log.effort_rating,
+        difficulty_feeling: log.difficulty_feeling,
+        notes: log.notes,
+        time_spent_minutes: log.time_spent_minutes,
+        created_at: log.created_at
+      })) as GoalLog[];
+      
+      return {
+        ...goal,
+        // Include the enhanced log history
+        log_history: enhancedLogs,
+        // Ensure all optional fields exist with proper fallbacks
+        target_completion_date: typedGoal.target_completion_date || null,
+        countdown_active: typedGoal.countdown_active || false,
+        countdown_ended: typedGoal.countdown_ended || false,
+        accountability_prompt_shown: typedGoal.accountability_prompt_shown || false,
+        last_log_date: typedGoal.last_log_date || null,
+        description: typedGoal.description || null,
+        recovery_start_date: typedGoal.recovery_start_date || null
+      } as Goal;
+    });
+    
+    console.log('Processed goals with enhanced logs:', goalsWithLogs.length);
+    
+    // Log sample data for debugging
+    if (goalsWithLogs.length > 0) {
+      console.log('Sample goal with logs:', {
+        name: goalsWithLogs[0].name,
+        logCount: goalsWithLogs[0].log_history?.length || 0,
+        hasTargetDate: !!goalsWithLogs[0].target_completion_date,
+        hasCountdown: goalsWithLogs[0].countdown_active,
+        sampleLog: goalsWithLogs[0].log_history?.[0] ? {
+          difficulty: goalsWithLogs[0].log_history[0].difficulty,
+          feel_option: goalsWithLogs[0].log_history[0].feel_option,
+          message: goalsWithLogs[0].log_history[0].message,
+          created_at: goalsWithLogs[0].log_history[0].created_at
+        } : 'No logs'
+      });
+    }
+    
+    return goalsWithLogs;
+  },
+  enabled: !!user,
+});
 
   // Fetch logs for a specific goal
-  const useGoalLogs = (goalId: string) => {
-    return useQuery({
-      queryKey: ['goal-logs', goalId],
-      queryFn: async () => {
-        const { data, error } = await supabase
-          .from('goal_logs')
-          .select('*')
-          .eq('goal_id', goalId)
-          .order('log_date', { ascending: false })
-          .limit(30);
-        
-        if (error) throw error;
-        return data as GoalLog[];
-      },
-      enabled: !!goalId,
-    });
-  };
+const useGoalLogs = (goalId: string) => {
+  return useQuery({
+    queryKey: ['goal-logs', goalId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('goal_logs')
+        .select('*')
+        .eq('goal_id', goalId)
+        .order('log_date', { ascending: false })
+        .limit(30);
+      
+      if (error) throw error;
+      
+      // Cast and enhance the logs with the new fields
+      const enhancedLogs = (data || []).map((log: any) => ({
+        ...log,
+        difficulty: log.difficulty || null,
+        feel_option: log.feel_option || null,
+        message: log.message || null,
+        timestamp: log.timestamp || log.created_at
+      })) as GoalLog[];
+      
+      return enhancedLogs;
+    },
+    enabled: !!goalId,
+  });
+};
 
   // Create a new goal - MINIMAL SAFE VERSION
   const createGoal = useMutation({
@@ -150,153 +226,177 @@ export function useGoals() {
   });
 
   const logEffort = useMutation({
-    mutationFn: async (logData: LogEffortData) => {
-      if (!user) throw new Error('Not authenticated');
+  mutationFn: async (logData: LogEffortData & {
+    difficulty?: string;
+    feel_option?: string;
+    message?: string;
+  }) => {
+    if (!user) throw new Error('Not authenticated');
 
-      console.log('🔴 DEBUG: Starting log effort for goal:', logData.goal_id);
+    console.log('🔴 DEBUG: Starting log effort for goal:', logData.goal_id);
+    console.log('🔴 DEBUG: Enhanced log data:', {
+      difficulty: logData.difficulty,
+      feel_option: logData.feel_option,
+      message: logData.message,
+      effort_rating: logData.effort_rating
+    });
 
-      // Get the goal with its last_log_date
-      const { data: goal, error: goalError } = await supabase
-        .from('goals')
-        .select('*')
-        .eq('id', logData.goal_id)
-        .single();
-      
-      if (goalError) {
-        console.error('🔴 DEBUG: Error fetching goal:', goalError);
-        throw goalError;
-      }
-
-      const typedGoal = goal as Goal;
-      console.log('🔴 DEBUG: Goal from DB - last_log_date:', typedGoal.last_log_date);
-
-      // ================== COOLDOWN CHECK ==================
-if (typedGoal.last_log_date) {
-  console.log('🔴 DEBUG: last_log_date exists, checking cooldown...');
-  console.log('🔴 DEBUG: Raw last_log_date:', typedGoal.last_log_date);
-  console.log('🔴 DEBUG: Type:', typeof typedGoal.last_log_date);
-  console.log('🔴 DEBUG: Length:', typedGoal.last_log_date.length);
-  
-  let lastLog: Date;
-  
-  // Handle different date formats
-  if (typeof typedGoal.last_log_date === 'string') {
-    if (typedGoal.last_log_date.length === 10) {
-      // Format: "YYYY-MM-DD" (date only) - add time
-      console.log('🔴 DEBUG: Date-only format detected');
-      lastLog = new Date(typedGoal.last_log_date + 'T12:00:00.000Z');
-    } else if (typedGoal.last_log_date.includes('T')) {
-      // Format: ISO string with time
-      console.log('🔴 DEBUG: ISO format detected');
-      lastLog = new Date(typedGoal.last_log_date);
-    } else {
-      // Unknown format, try to parse anyway
-      console.log('🔴 DEBUG: Unknown format, trying to parse');
-      lastLog = new Date(typedGoal.last_log_date);
+    // Get the goal with its last_log_date
+    const { data: goal, error: goalError } = await supabase
+      .from('goals')
+      .select('*')
+      .eq('id', logData.goal_id)
+      .single();
+    
+    if (goalError) {
+      console.error('🔴 DEBUG: Error fetching goal:', goalError);
+      throw goalError;
     }
-  } else {
-    // Already a Date object or something else
-    lastLog = new Date(typedGoal.last_log_date);
-  }
-  
-  console.log('🔴 DEBUG: Parsed lastLog:', lastLog.toISOString());
-  
-  const now = new Date();
-  const hoursSinceLastLog = (now.getTime() - lastLog.getTime()) / (1000 * 60 * 60);
-  
-  console.log('🔴 DEBUG: hoursSinceLastLog:', hoursSinceLastLog);
-  
-  if (hoursSinceLastLog < 12) {
-    console.log('🔴 DEBUG: COOLDOWN ACTIVE! Throwing error...');
-    const nextLogTime = new Date(lastLog.getTime() + 12 * 60 * 60 * 1000);
-    const timeUntilNextLog = nextLogTime.getTime() - now.getTime();
-    
-    const hours = Math.floor(timeUntilNextLog / (1000 * 60 * 60));
-    const minutes = Math.floor((timeUntilNextLog % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((timeUntilNextLog % (1000 * 60)) / 1000);
-    
-    const timeMessage = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-    
-    throw new Error(`COOLDOWN:${timeMessage}:${nextLogTime.toISOString()}`);
-  } else {
-    console.log('🔴 DEBUG: Cooldown passed, allowing log');
-  }
-} else {
-  console.log('🔴 DEBUG: No last_log_date, allowing log');
-}
-// ================== END COOLDOWN CHECK ==================
 
-      // Get the last log from goal_logs table for momentum calculation
-      const { data: lastLogs } = await supabase
-        .from('goal_logs')
-        .select('log_date')
-        .eq('goal_id', logData.goal_id)
-        .order('log_date', { ascending: false })
-        .limit(1);
+    const typedGoal = goal as Goal;
+    console.log('🔴 DEBUG: Goal from DB - last_log_date:', typedGoal.last_log_date);
 
-      const today = format(new Date(), 'yyyy-MM-dd');
-      const lastLogDate = lastLogs?.[0]?.log_date;
-      const daysSinceLastLog = lastLogDate 
-        ? differenceInDays(new Date(), parseISO(lastLogDate))
-        : 1;
-
-      // Calculate momentum update
-      const update = calculateMomentumAfterLog(typedGoal, logData.effort_rating, daysSinceLastLog);
-
-      // Insert the log
-      const { error: logError } = await supabase
-        .from('goal_logs')
-        .upsert({
-          goal_id: logData.goal_id,
-          user_id: user.id,
-          log_date: today,
-          effort_rating: logData.effort_rating,
-          difficulty_feeling: logData.difficulty_feeling || null,
-          notes: logData.notes || null,
-          time_spent_minutes: logData.time_spent_minutes || null,
-        }, {
-          onConflict: 'goal_id,log_date',
-        });
+    // ================== COOLDOWN CHECK ==================
+    if (typedGoal.last_log_date) {
+      console.log('🔴 DEBUG: last_log_date exists, checking cooldown...');
+      console.log('🔴 DEBUG: Raw last_log_date:', typedGoal.last_log_date);
+      console.log('🔴 DEBUG: Type:', typeof typedGoal.last_log_date);
+      console.log('🔴 DEBUG: Length:', typedGoal.last_log_date.length);
       
-      if (logError) throw logError;
-
-      // Update the goal with new last_log_date
-      const newLastLogDate = new Date().toISOString();
-      console.log('🔴 DEBUG: Setting last_log_date to:', newLastLogDate);
+      let lastLog: Date;
       
-      const { error: updateError } = await supabase
-        .from('goals')
-        .update({
-          momentum_score: update.newMomentum,
-          current_difficulty_multiplier: update.newDifficultyMultiplier,
-          consecutive_successes: update.newConsecutiveSuccesses,
-          consecutive_misses: update.newConsecutiveMisses,
-          in_recovery_mode: update.shouldExitRecovery ? false : typedGoal.in_recovery_mode,
-          recovery_start_date: update.shouldExitRecovery ? null : typedGoal.recovery_start_date,
-          total_effort_logged: (typedGoal.total_effort_logged || 0) + 1,
-          last_log_date: newLastLogDate, // Update the cooldown timer
-        } as any) // FIX: Add "as any" to bypass TypeScript error
-        .eq('id', logData.goal_id);
-      
-      if (updateError) {
-        console.error('🔴 DEBUG: Error updating goal:', updateError);
-        throw updateError;
+      // Handle different date formats
+      if (typeof typedGoal.last_log_date === 'string') {
+        if (typedGoal.last_log_date.length === 10) {
+          // Format: "YYYY-MM-DD" (date only) - add time
+          console.log('🔴 DEBUG: Date-only format detected');
+          lastLog = new Date(typedGoal.last_log_date + 'T12:00:00.000Z');
+        } else if (typedGoal.last_log_date.includes('T')) {
+          // Format: ISO string with time
+          console.log('🔴 DEBUG: ISO format detected');
+          lastLog = new Date(typedGoal.last_log_date);
+        } else {
+          // Unknown format, try to parse anyway
+          console.log('🔴 DEBUG: Unknown format, trying to parse');
+          lastLog = new Date(typedGoal.last_log_date);
+        }
+      } else {
+        // Already a Date object or something else
+        lastLog = new Date(typedGoal.last_log_date);
       }
-
-      console.log('🔴 DEBUG: Update successful!');
       
-      return { 
-        success: true, 
-        message: update.message || 'Effort logged!',
-        nextLogTime: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
-      };
-    },
-    onSuccess: () => {
-      console.log('🔴 DEBUG: Mutation onSuccess called');
-      queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['goal-logs'] });
-    },
-  });
+      console.log('🔴 DEBUG: Parsed lastLog:', lastLog.toISOString());
+      
+      const now = new Date();
+      const hoursSinceLastLog = (now.getTime() - lastLog.getTime()) / (1000 * 60 * 60);
+      
+      console.log('🔴 DEBUG: hoursSinceLastLog:', hoursSinceLastLog);
+      
+      if (hoursSinceLastLog < 12) {
+        console.log('🔴 DEBUG: COOLDOWN ACTIVE! Throwing error...');
+        const nextLogTime = new Date(lastLog.getTime() + 12 * 60 * 60 * 1000);
+        const timeUntilNextLog = nextLogTime.getTime() - now.getTime();
+        
+        const hours = Math.floor(timeUntilNextLog / (1000 * 60 * 60));
+        const minutes = Math.floor((timeUntilNextLog % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((timeUntilNextLog % (1000 * 60)) / 1000);
+        
+        const timeMessage = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        
+        throw new Error(`COOLDOWN:${timeMessage}:${nextLogTime.toISOString()}`);
+      } else {
+        console.log('🔴 DEBUG: Cooldown passed, allowing log');
+      }
+    } else {
+      console.log('🔴 DEBUG: No last_log_date, allowing log');
+    }
+    // ================== END COOLDOWN CHECK ==================
+
+    // Get the last log from goal_logs table for momentum calculation
+    const { data: lastLogs } = await supabase
+      .from('goal_logs')
+      .select('log_date')
+      .eq('goal_id', logData.goal_id)
+      .order('log_date', { ascending: false })
+      .limit(1);
+
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const lastLogDate = lastLogs?.[0]?.log_date;
+    const daysSinceLastLog = lastLogDate 
+      ? differenceInDays(new Date(), parseISO(lastLogDate))
+      : 1;
+
+    // Calculate momentum update
+    const update = calculateMomentumAfterLog(typedGoal, logData.effort_rating, daysSinceLastLog);
+
+    // Insert the enhanced log with all new fields
+    const { error: logError } = await supabase
+      .from('goal_logs')
+      .upsert({
+        goal_id: logData.goal_id,
+        user_id: user.id,
+        log_date: today,
+        effort_rating: logData.effort_rating,
+        difficulty_feeling: logData.difficulty_feeling || logData.difficulty || null,
+        notes: logData.notes || logData.message || null,
+        time_spent_minutes: logData.time_spent_minutes || null,
+        // NEW: Enhanced logging fields
+        difficulty: logData.difficulty || null,
+        feel_option: logData.feel_option || null,
+        message: logData.message || null,
+        created_at: new Date().toISOString(), // Ensure timestamp is set
+      }, {
+        onConflict: 'goal_id,log_date',
+      });
+    
+    if (logError) {
+      console.error('🔴 DEBUG: Error inserting enhanced log:', logError);
+      throw logError;
+    }
+
+    console.log('🔴 DEBUG: Enhanced log inserted successfully');
+
+    // Update the goal with new last_log_date
+    const newLastLogDate = new Date().toISOString();
+    console.log('🔴 DEBUG: Setting last_log_date to:', newLastLogDate);
+    
+    // Calculate total minutes (use effort_rating * 15 as estimate if time_spent_minutes not provided)
+    const minutesLogged = typedGoal.effort_per_day_minutes;
+    
+    const { error: updateError } = await supabase
+      .from('goals')
+      .update({
+        momentum_score: update.newMomentum,
+        current_difficulty_multiplier: update.newDifficultyMultiplier,
+        consecutive_successes: update.newConsecutiveSuccesses,
+        consecutive_misses: update.newConsecutiveMisses,
+        in_recovery_mode: update.shouldExitRecovery ? false : typedGoal.in_recovery_mode,
+        recovery_start_date: update.shouldExitRecovery ? null : typedGoal.recovery_start_date,
+        total_effort_logged: (typedGoal.total_effort_logged || 0) + minutesLogged,
+        last_log_date: newLastLogDate, // Update the cooldown timer
+        updated_at: new Date().toISOString(),
+      } as any) // FIX: Add "as any" to bypass TypeScript error
+      .eq('id', logData.goal_id);
+    
+    if (updateError) {
+      console.error('🔴 DEBUG: Error updating goal:', updateError);
+      throw updateError;
+    }
+
+    console.log('🔴 DEBUG: Goal updated successfully!');
+    
+    return { 
+      success: true, 
+      message: update.message || 'Effort logged!',
+      nextLogTime: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
+    };
+  },
+  onSuccess: () => {
+    console.log('🔴 DEBUG: Mutation onSuccess called');
+    queryClient.invalidateQueries({ queryKey: ['goals', user?.id] });
+    queryClient.invalidateQueries({ queryKey: ['goal-logs'] });
+  },
+});
 
   // Submit a reflection for a missed day
   const submitReflection = useMutation({

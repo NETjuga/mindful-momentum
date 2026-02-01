@@ -68,7 +68,7 @@ export function CreateGoalDialog({ open, onOpenChange }: CreateGoalDialogProps) 
       setIsSubmitting(false);
     }
   };
-
+ 
   const handleUseAdjusted = () => {
     if (feasibility?.adjustedGoal) {
       setFormData(feasibility.adjustedGoal);

@@ -1,3 +1,4 @@
+// src/components/LogEffortDialog.tsx
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
@@ -16,11 +17,22 @@ interface LogEffortDialogProps {
   goal: Goal | null;
 }
 
+// Updated difficulty options - clear intensity levels
 const difficultyOptions = [
-  { value: 'easy', label: 'Easier than expected' },
-  { value: 'right', label: 'Just right' },
-  { value: 'hard', label: 'Challenging' },
-  { value: 'struggle', label: 'Really struggled' },
+  { value: 'minimal', label: 'Minimal', emoji: '😌' },
+  { value: 'light', label: 'Light', emoji: '😊' },
+  { value: 'moderate', label: 'Moderate', emoji: '😐' },
+  { value: 'strong', label: 'Strong', emoji: '😅' },
+  { value: 'maximum', label: 'Maximum', emoji: '🔥' },
+];
+
+// NEW: Simplified emotional outcome options (no overlap with difficulty)
+const feelOptions = [
+  { value: 'Neutral', label: 'Neutral', emoji: '😐' },
+  { value: 'Okay', label: 'Okay', emoji: '🙂' },
+  { value: 'Good', label: 'Good', emoji: '😊' },
+  { value: 'Energizing', label: 'Energizing', emoji: '✨' },
+  { value: 'Proud', label: 'Proud', emoji: '🏆' },
 ];
 
 export function LogEffortDialog({ open, onOpenChange, goal }: LogEffortDialogProps) {
@@ -28,7 +40,8 @@ export function LogEffortDialog({ open, onOpenChange, goal }: LogEffortDialogPro
   
   const [effort, setEffort] = useState(0);
   const [difficulty, setDifficulty] = useState('');
-  const [notes, setNotes] = useState('');
+  const [feelOption, setFeelOption] = useState('');
+  const [message, setMessage] = useState('');
   const [showCooldownDialog, setShowCooldownDialog] = useState(false);
   const [cooldownEndTime, setCooldownEndTime] = useState<Date | null>(null);
 
@@ -45,13 +58,32 @@ export function LogEffortDialog({ open, onOpenChange, goal }: LogEffortDialogPro
       return;
     }
 
+    if (!difficulty) {
+      toast.error('Please select a difficulty level');
+      return;
+    }
+
+    if (!feelOption) {
+      toast.error('Please select how it felt');
+      return;
+    }
+
     try {
-      await logEffort.mutateAsync({
+      // Create the enhanced log data
+      const logData = {
         goal_id: goal.id,
         effort_rating: effort,
-        difficulty_feeling: difficulty || undefined,
-        notes: notes || undefined,
-      });
+        difficulty_feeling: difficulty, // Keep for backward compatibility
+        notes: message || undefined, // Keep for backward compatibility
+        // New enhanced fields
+        difficulty: difficulty as 'minimal' | 'light' | 'moderate' | 'strong' | 'maximum',
+        feel_option: feelOption,
+        message: message || undefined,
+        // Use the goal's daily commitment minutes
+        time_spent_minutes: goal.effort_per_day_minutes,
+      };
+
+      await logEffort.mutateAsync(logData);
 
       toast.success('Effort logged! Great job today.');
       
@@ -107,7 +139,8 @@ export function LogEffortDialog({ open, onOpenChange, goal }: LogEffortDialogPro
   const resetForm = () => {
     setEffort(0);
     setDifficulty('');
-    setNotes('');
+    setFeelOption('');
+    setMessage('');
   };
 
   return (
@@ -116,11 +149,11 @@ export function LogEffortDialog({ open, onOpenChange, goal }: LogEffortDialogPro
         if (!o) resetForm();
         onOpenChange(o);
       }}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-serif text-2xl">Log Your Effort</DialogTitle>
             <DialogDescription>
-              {goal.name} • Target: {adjustedEffort} minutes today
+              {goal.name} • Daily commitment: {goal.effort_per_day_minutes} minutes
               {goal.in_recovery_mode && ' (Recovery mode)'}
             </DialogDescription>
           </DialogHeader>
@@ -128,38 +161,90 @@ export function LogEffortDialog({ open, onOpenChange, goal }: LogEffortDialogPro
           <div className="space-y-6 mt-4">
             {/* Effort Rating */}
             <div className="space-y-3">
-              <Label>How much effort did you put in?</Label>
+              <Label>How much effort did you put in? *</Label>
               <EffortRating value={effort} onChange={setEffort} />
+              <p className="text-xs text-muted-foreground">
+                1 = Minimal effort, 5 = Maximum effort
+              </p>
             </div>
 
-            {/* Difficulty (optional) */}
+            {/* Difficulty Level (required) */}
             <div className="space-y-3">
-              <Label>How did it feel? (optional)</Label>
-              <div className="flex flex-wrap gap-2">
+              <Label>
+                How intense was it? *
+                <span className="text-xs text-muted-foreground ml-1">(Physical/Mental intensity)</span>
+              </Label>
+              <div className="grid grid-cols-5 gap-2">
                 {difficultyOptions.map((option) => (
                   <Button
                     key={option.value}
                     type="button"
                     variant={difficulty === option.value ? 'default' : 'outline'}
                     size="sm"
+                    className="flex flex-col h-auto py-3"
                     onClick={() => setDifficulty(difficulty === option.value ? '' : option.value)}
                   >
-                    {option.label}
+                    <span className="text-lg mb-1">{option.emoji}</span>
+                    <span className="text-xs font-medium">{option.label}</span>
                   </Button>
                 ))}
               </div>
             </div>
 
-            {/* Notes (optional) */}
+            {/* Feel Option (required) - Emotional outcome */}
+            <div className="space-y-3">
+              <Label>
+                How did it feel? *
+                <span className="text-xs text-muted-foreground ml-1">(Emotional outcome after doing it)</span>
+              </Label>
+              <div className="grid grid-cols-5 gap-2">
+                {feelOptions.map((option) => (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    variant={feelOption === option.value ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex flex-col h-auto py-3"
+                    onClick={() => setFeelOption(feelOption === option.value ? '' : option.value)}
+                  >
+                    <span className="text-lg mb-1">{option.emoji}</span>
+                    <span className="text-xs font-medium">{option.label}</span>
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Message/Reflection (optional) */}
             <div className="space-y-2">
-              <Label htmlFor="notes">Notes (optional)</Label>
+              <Label htmlFor="message">Reflection (optional)</Label>
               <Textarea
-                id="notes"
-                placeholder="Any reflections or wins to celebrate?"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={2}
+                id="message"
+                placeholder="Any thoughts, wins, or lessons from today's effort?"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={3}
               />
+              <p className="text-xs text-muted-foreground">
+                This will be saved in your log history for future reflection.
+              </p>
+            </div>
+
+            {/* Summary */}
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">This log will add:</p>
+                  <p className="text-sm text-muted-foreground">
+                    {goal.effort_per_day_minutes} minutes to your total effort
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium">Daily commitment:</p>
+                  <p className="text-sm text-muted-foreground">
+                    {goal.effort_per_day_minutes} min/day
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* Submit */}
@@ -169,7 +254,7 @@ export function LogEffortDialog({ open, onOpenChange, goal }: LogEffortDialogPro
               </Button>
               <Button 
                 onClick={handleSubmit}
-                disabled={effort === 0 || logEffort.isPending}
+                disabled={effort === 0 || !difficulty || !feelOption || logEffort.isPending}
                 className="flex-1"
               >
                 {logEffort.isPending ? 'Logging...' : 'Log Effort'}
