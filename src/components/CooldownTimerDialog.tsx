@@ -60,7 +60,7 @@ export function CooldownTimerDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Clock className="h-5 w-5" />
-            Daily Log Complete ✅
+            Daily Log Complete
           </DialogTitle>
           <DialogDescription>
             You've already logged for "{goalName}" today
@@ -82,7 +82,7 @@ export function CooldownTimerDialog({
 
           {/* Progress Bar */}
           <div className="space-y-2">
-            <Progress value={progress} className="h-2" />
+            <Progress value={progress} className="h-2 bg-green-100" />
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>Last log</span>
               <span>{progress.toFixed(0)}%</span>
@@ -90,8 +90,8 @@ export function CooldownTimerDialog({
             </div>
           </div>
 
-          {/* Simple Message */}
-          <div className="p-4 bg-muted/30 rounded-lg space-y-3">
+          {/* Simple Message with ORANGE border (changed from green) */}
+          <div className="p-4 bg-muted/30 rounded-lg space-y-3 border border-orange-500">
             <div className="flex items-center gap-2">
               <Brain className="h-4 w-4" />
               <span className="text-sm font-medium">Why the wait?</span>
@@ -102,8 +102,8 @@ export function CooldownTimerDialog({
             </p>
           </div>
 
-          {/* Next Available Time */}
-          <div className="text-center p-3 bg-muted/20 rounded-lg">
+          {/* Next Available Time - KEEPING green border */}
+          <div className="text-center p-3 bg-muted/20 rounded-lg border border-green-500">
             <p className="text-sm font-medium">Next log available:</p>
             <p className="font-mono font-bold">
               {nextLogTime.toLocaleTimeString([], { 
@@ -122,6 +122,7 @@ export function CooldownTimerDialog({
           <Button 
             variant="outline" 
             onClick={() => onOpenChange(false)}
+            className="border border-green-500 text-green-700 hover:bg-green-50 hover:text-green-800 hover:border-green-600"
           >
             Got it
           </Button>
