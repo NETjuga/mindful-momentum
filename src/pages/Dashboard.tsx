@@ -172,7 +172,10 @@ useEffect(() => {
       <Target className="h-4 w-4" />
       <span>Goal Dashboard</span>
     </DropdownMenuItem>
-    <DropdownMenuItem className="gap-2">
+    <DropdownMenuItem 
+      className="gap-2"
+      onClick={() => navigate('/ikioi')}
+    >
       <BarChart className="h-4 w-4" />
       <span>Your Ikioi</span>
     </DropdownMenuItem>
@@ -342,3 +345,6 @@ useEffect(() => {
     </div>
   );
 }
+
+
+DropdownMenuItem
