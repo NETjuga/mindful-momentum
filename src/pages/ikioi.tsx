@@ -1,7 +1,10 @@
 // src/pages/ikioi.tsx
-import { useState } from 'react';
+import { useEffect, useState } from 'react'; // Combined imports
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Header } from '@/components/Header';
-import { Button } from '@/components/ui/button';import { 
+import { Button } from '@/components/ui/button';
+import { 
   Plus, 
   Move, 
   ZoomIn, 
@@ -20,9 +23,6 @@ import { Button } from '@/components/ui/button';import {
 import Whiteboard from '@/components/ikioi/Whiteboard';
 import IkioiColumn from '@/components/ikioi/IkioiColumn';
 import type { IkioiColumnData } from '@/components/ikioi/IkioiColumn';
-
-
-
 import { useNavigate } from 'react-router-dom';
 import { 
   DropdownMenu,
@@ -35,9 +35,11 @@ export default function IkioiPage() {
   const [columns, setColumns] = useState<IkioiColumnData[]>([
     {
       id: "1",
-      position: { x: 100, y: 100 }, // This should be an object with x and y, not a number
+      position: { x: 100, y: 100 },
       category: "",
       goal: "",
+      targetYear: new Date().getFullYear() + 1,
+      color: "#BAE1FF",
       sequences: []
     }
   ]);
@@ -45,6 +47,8 @@ export default function IkioiPage() {
   const [isDraggingBoard, setIsDraggingBoard] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [displayName, setDisplayName] = useState('');
   
   const categories = [
     "Career", "Academia", "Business", "Sport", 
@@ -58,6 +62,11 @@ export default function IkioiPage() {
   const dailyStepsCount = columns.reduce((total, column) => 
     total + column.sequences.reduce((seqTotal, seq) => seqTotal + seq.dailySteps.length, 0), 0
   );
+  
+  const totalDailyTime = columns.reduce((total, column) => 
+    total + column.sequences.reduce((seqTotal, seq) => 
+      seqTotal + seq.dailySteps.reduce((stepTotal, step) => 
+        stepTotal + (step.timeMinutes || 0), 0), 0), 0);
 
   const addColumn = () => {
     if (columns.length >= 5) return;
@@ -67,6 +76,8 @@ export default function IkioiPage() {
       position: { x: Math.random() * 500, y: Math.random() * 300 },
       category: "",
       goal: "",
+      targetYear: new Date().getFullYear() + 1,
+      color: "#BAE1FF",
       sequences: []
     };
     
@@ -99,6 +110,7 @@ export default function IkioiPage() {
             {
               id: Date.now().toString(),
               description: "",
+              dueMonth: "",
               completed: false,
               dailySteps: []
             }
@@ -123,6 +135,7 @@ export default function IkioiPage() {
                   {
                     id: Date.now().toString(),
                     description: "",
+                    timeMinutes: 30,
                     completed: false
                   }
                 ]
@@ -136,68 +149,109 @@ export default function IkioiPage() {
     }));
   };
 
+  // ADD THIS MISSING useEffect FOR DISPLAY NAME:
+  useEffect(() => {
+    const fetchDisplayName = async () => {
+      if (user) {
+        try {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('display_name')
+            .eq('id', user.id)
+            .maybeSingle();
+          
+          if (error) {
+            console.error('Profile fetch error:', error);
+            setDisplayName(user.email?.split('@')[0] || '');
+            return;
+          }
+          
+          const name = 
+            data?.display_name || 
+            user.user_metadata?.display_name || 
+            user.email?.split('@')[0] || 
+            '';
+          
+          setDisplayName(name);
+          
+          if (user.user_metadata?.display_name && !data?.display_name) {
+            await supabase
+              .from('profiles')
+              .update({ display_name: user.user_metadata.display_name })
+              .eq('id', user.id);
+          }
+        } catch (error) {
+          console.error('Error in fetchDisplayName:', error);
+          setDisplayName(user.email?.split('@')[0] || '');
+        }
+      }
+    };
+    
+    fetchDisplayName();
+  }, [user]);
+
   const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.1, 2));
   const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.1, 0.5));
   const resetZoom = () => setZoom(1);
 
   return (
     <div className="min-h-screen bg-background">
-  <Header />
-  
-  <main className="container mx-auto px-4 py-8">
-    {/* Page Header with Navigation */}
-    <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-      <div className="flex items-center gap-4">
-        {isFullscreen && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsFullscreen(false)}
-            className="gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Exit Focus
-          </Button>
-        )}
-        <div>
-          <h1 className="font-serif text-3xl font-bold text-foreground">Your Ikioi</h1>
-          <p className="text-muted-foreground mt-2">
-            Arrange your goals on the whiteboard. Drag to move, zoom to adjust view.
-          </p>
-        </div>
-      </div>
+      <Header />
       
-      {/* Navigation Dropdown */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="gap-2">
-            <BarChart className="h-4 w-4" />
-            <span>Your Ikioi</span>
-            <ChevronDown className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuItem 
-            className="gap-2"
-            onClick={() => navigate('/')}
-          >
-            <Target className="h-4 w-4" />
-            <span>Goal Dashboard</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem className="gap-2" disabled>
-            <BarChart className="h-4 w-4" />
-            <span>Your Ikioi</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem className="gap-2">
-            <Calendar className="h-4 w-4" />
-            <span>Calendar</span>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+      <main className="container mx-auto px-4 py-8">
+        {/* Page Header with Navigation */}
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-4">
+            {isFullscreen && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsFullscreen(false)}
+                className="gap-2"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Exit Focus
+              </Button>
+            )}
+            <div>
+              <h1 className="font-serif text-3xl font-bold text-foreground">Your Ikioi</h1>
+              <p className="text-muted-foreground mt-2">
+                Arrange your goals on the whiteboard. Drag to move, zoom to adjust view.
+              </p>
+            </div>
+          </div>
+          
+          {/* Navigation Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <BarChart className="h-4 w-4" />
+                <span>Your Ikioi</span>
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem 
+                className="gap-2"
+                onClick={() => navigate('/')}
+              >
+                <Target className="h-4 w-4" />
+                <span>Goal Dashboard</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem className="gap-2" disabled>
+                <BarChart className="h-4 w-4" />
+                <span>Your Ikioi</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem className="gap-2">
+                <Calendar className="h-4 w-4" />
+                <span>Calendar</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
-        {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        {/* Stats Overview - UPDATED TO 4 COLUMNS */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border">
             <div className="text-2xl font-bold text-primary">{goalsCount}</div>
             <div className="text-sm text-muted-foreground">Goals to complete</div>
@@ -209,6 +263,10 @@ export default function IkioiPage() {
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border">
             <div className="text-2xl font-bold text-primary">{dailyStepsCount}</div>
             <div className="text-sm text-muted-foreground">Daily steps</div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border">
+            <div className="text-2xl font-bold text-primary">{Math.round(totalDailyTime / 60)}h</div>
+            <div className="text-sm text-muted-foreground">Daily time</div>
           </div>
         </div>
 
@@ -298,11 +356,17 @@ export default function IkioiPage() {
 
 <div className={`${isFullscreen ? "fixed inset-4 z-50" : "relative"}`}>
   <Whiteboard 
-    zoom={zoom}
-    isDraggingBoard={isDraggingBoard}
-    onDragChange={setIsDraggingBoard}
-    isFullscreen={isFullscreen} // Add this prop
-  >
+  zoom={zoom}
+  isDraggingBoard={isDraggingBoard}
+  onDragChange={setIsDraggingBoard}
+  isFullscreen={isFullscreen}
+  onAddColumn={addColumn}
+  onExitFocus={() => setIsFullscreen(false)}
+  onZoomIn={handleZoomIn}
+  onZoomOut={handleZoomOut}
+  onResetZoom={resetZoom}
+  userName={displayName}
+>
     {columns.map((column) => (
       <IkioiColumn
         key={column.id}
