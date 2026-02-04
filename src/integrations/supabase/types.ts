@@ -195,6 +195,145 @@ export type Database = {
           },
         ]
       }
+
+// Add these tables AFTER the 'reflections' table in your Tables section:
+
+      ikioi_columns: {
+        Row: {
+          id: string
+          user_id: string
+          title: string
+          description: string | null
+          category: string | null
+          target_year: number
+          color: string
+          position_x: number
+          position_y: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title: string
+          description?: string | null
+          category?: string | null
+          target_year?: number
+          color?: string
+          position_x?: number
+          position_y?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string
+          description?: string | null
+          category?: string | null
+          target_year?: number
+          color?: string
+          position_x?: number
+          position_y?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ikioi_columns_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ikioi_sequences: {
+        Row: {
+          id: string
+          column_id: string
+          title: string
+          description: string | null
+          due_month: string | null
+          position_x: number
+          position_y: number
+          completed: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          column_id: string
+          title: string
+          description?: string | null
+          due_month?: string | null
+          position_x?: number
+          position_y?: number
+          completed?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          column_id?: string
+          title?: string
+          description?: string | null
+          due_month?: string | null
+          position_x?: number
+          position_y?: number
+          completed?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ikioi_sequences_column_id_fkey"
+            columns: ["column_id"]
+            isOneToOne: false
+            referencedRelation: "ikioi_columns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ikioi_daily_steps: {
+        Row: {
+          id: string
+          sequence_id: string
+          description: string
+          time_minutes: number
+          completed: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          sequence_id: string
+          description: string
+          time_minutes?: number
+          completed?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          sequence_id?: string
+          description?: string
+          time_minutes?: number
+          completed?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ikioi_daily_steps_sequence_id_fkey"
+            columns: ["sequence_id"]
+            isOneToOne: false
+            referencedRelation: "ikioi_sequences"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+
     }
     Views: {
       [_ in never]: never
