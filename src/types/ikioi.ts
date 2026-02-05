@@ -84,3 +84,18 @@ export interface IkioiDailyStep {
   created_at: string;
   updated_at: string;
 }
+
+//EXPORT INTERFACES 
+export interface ExportOptions {
+  format: 'pdf' | 'png' | 'json' | 'csv';
+  layout: 'whiteboard' | 'table' | 'hierarchy';
+  includeMetadata: boolean;
+  includeStatistics: boolean;
+  fileName: string;
+}
+
+export interface ExportProgress {
+  current: number;
+  total: number;
+  message: string;
+}

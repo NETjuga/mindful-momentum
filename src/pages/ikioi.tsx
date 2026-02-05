@@ -1,4 +1,3 @@
-// src/pages/ikioi.tsx
 import { useEffect, useState } from 'react'; // Combined imports
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -18,7 +17,10 @@ import {
   Target,
   BarChart,
   Calendar,
-  ChevronDown
+  ChevronDown,
+  Download,
+  CheckCircle,
+  XCircle
 } from 'lucide-react';
 import Whiteboard from '@/components/ikioi/Whiteboard';
 import IkioiColumn from '@/components/ikioi/IkioiColumn';
@@ -31,6 +33,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ikioiService } from '@/integrations/supabase/ikioiService';
+import { IkioiExporter, type ExportOptions, type ExportProgress } from '@/lib/ikioiExporter';
+import ExportModal from '@/components/ikioi/ExportModal';
 
 export default function IkioiPage() {
   const [columns, setColumns] = useState<IkioiColumnData[]>([]); 
@@ -41,6 +45,17 @@ export default function IkioiPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [displayName, setDisplayName] = useState('');
+  
+  // Export states
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<ExportProgress>({
+    current: 0,
+    total: 0,
+    message: ''
+  });
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showExportSuccess, setShowExportSuccess] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   
   const categories = [
     "Career", "Academia", "Business", "Sport", 
@@ -459,6 +474,82 @@ export default function IkioiPage() {
   const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.1, 0.5));
   const resetZoom = () => setZoom(1);
 
+  // Export function
+  // In the handleExport function, add this error handling:
+const handleExport = async (options: ExportOptions) => {
+  if (!user || columns.length === 0) return;
+  
+  setIsExporting(true);
+  setShowExportModal(false);
+  setExportError(null);
+  
+  try {
+    const exporter = new IkioiExporter(options);
+    
+    const statistics = {
+      goalsCount,
+      sequencesCount,
+      dailyStepsCount,
+      totalDailyTime
+    };
+
+    let blob: Blob;
+    
+    switch (options.format) {
+      case 'pdf':
+        blob = await exporter.export(columns, displayName, statistics, (progress) => {
+          setExportProgress(progress);
+        });
+        break;
+        
+      case 'png':
+        // Give it a moment for the DOM to be ready
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        const whiteboardElement = document.querySelector('.whiteboard-container') as HTMLElement;
+        if (!whiteboardElement) {
+          throw new Error('Whiteboard element not found. Please refresh and try again.');
+        }
+        blob = await exporter.exportAsImage(whiteboardElement, options.fileName);
+        break;
+        
+      case 'json':
+        blob = exporter.exportAsJson(columns, displayName, statistics);
+        break;
+        
+      case 'csv':
+        blob = exporter.exportAsCsv(columns);
+        break;
+        
+      default:
+        throw new Error(`Unsupported format: ${options.format}`);
+    }
+    
+    // Download the file
+    IkioiExporter.downloadBlob(blob, `${options.fileName}.${options.format}`);
+    
+    // Show success message
+    setShowExportSuccess(true);
+    setTimeout(() => setShowExportSuccess(false), 3000);
+    
+  } catch (error) {
+    console.error('Export failed:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Export failed';
+    
+    // Special handling for html2canvas errors
+    if (errorMessage.includes('html2canvas') || errorMessage.includes('canvas')) {
+      setExportError('PNG export requires additional setup. Try PDF, JSON, or CSV format instead.');
+    } else {
+      setExportError(errorMessage);
+    }
+    
+    setTimeout(() => setExportError(null), 5000);
+  } finally {
+    setIsExporting(false);
+    setExportProgress({ current: 0, total: 0, message: '' });
+  }
+};
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -475,13 +566,65 @@ export default function IkioiPage() {
     );
   }
 
-loadColumnsFromDB
-
   return (
     <div className="min-h-screen bg-background">
       <Header />
       
       <main className="container mx-auto px-4 py-8">
+        {/* Toast Notifications */}
+        {showExportSuccess && (
+          <div className="fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg border flex items-center gap-3 animate-in slide-in-from-right-5 bg-green-50 border-green-200 text-green-800">
+            <CheckCircle className="h-5 w-5" />
+            <div>
+              <p className="font-medium">Whiteboard exported successfully!</p>
+              <p className="text-sm">Check your downloads folder.</p>
+            </div>
+          </div>
+        )}
+        
+        {exportError && (
+          <div className="fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg border flex items-center gap-3 animate-in slide-in-from-right-5 bg-red-50 border-red-200 text-red-800">
+            <XCircle className="h-5 w-5" />
+            <div>
+              <p className="font-medium">Export failed</p>
+              <p className="text-sm">{exportError}</p>
+            </div>
+          </div>
+        )}
+        
+        {/* Export Progress Indicator */}
+        {isExporting && (
+          <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-white dark:bg-gray-800 border rounded-xl shadow-lg p-4 min-w-[300px]">
+            <div className="flex items-center gap-3">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+              <div className="flex-1">
+                <p className="font-medium text-sm">Exporting whiteboard...</p>
+                <p className="text-xs text-muted-foreground">{exportProgress.message}</p>
+                <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mt-1">
+                  <div 
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{ 
+                      width: exportProgress.total > 0 
+                        ? `${(exportProgress.current / exportProgress.total) * 100}%` 
+                        : '0%' 
+                    }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Export Modal */}
+        <ExportModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          onExport={handleExport}
+          userName={displayName}
+          columnsCount={columns.length}
+          isLoading={isExporting}
+        />
+        
         {/* Page Header with Navigation */}
         <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -618,14 +761,26 @@ loadColumnsFromDB
             </Button>
           </div>
 
-          <Button 
-            onClick={addColumn}
-            disabled={columns.length >= 5}
-            className="gap-2 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary"
-          >
-            <Plus className="h-4 w-4" />
-            Add Goal Column ({columns.length}/5)
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button 
+              onClick={() => setShowExportModal(true)}
+              disabled={columns.length === 0 || isExporting}
+              variant="outline"
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Export
+            </Button>
+            
+            <Button 
+              onClick={addColumn}
+              disabled={columns.length >= 5}
+              className="gap-2 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary"
+            >
+              <Plus className="h-4 w-4" />
+              Add Goal Column ({columns.length}/5)
+            </Button>
+          </div>
         </div>
 
         {/* Interactive Whiteboard */}
@@ -673,6 +828,7 @@ loadColumnsFromDB
                 <li>• Drag columns to arrange them</li>
                 <li>• Click "Pan Board" to move the entire view</li>
                 <li>• Use zoom controls to adjust view</li>
+                <li>• Export your whiteboard as PDF, PNG, JSON, or CSV</li>
               </ul>
             </div>
             <div>
@@ -689,6 +845,7 @@ loadColumnsFromDB
                 <li>• Start with 1-2 major goals</li>
                 <li>• Break big goals into achievable sequences</li>
                 <li>• Daily steps should be concrete actions</li>
+                <li>• Export regularly to track progress</li>
               </ul>
             </div>
           </div>
@@ -697,3 +854,4 @@ loadColumnsFromDB
     </div>
   );
 }
+

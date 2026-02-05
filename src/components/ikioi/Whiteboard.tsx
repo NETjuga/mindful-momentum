@@ -1,4 +1,3 @@
-// src/components/ikioi/Whiteboard.tsx
 import { ReactNode, useState, useEffect } from 'react';
 import { Move, Plus, LogOut, ZoomIn, ZoomOut, Grid, Target } from 'lucide-react';
 
@@ -27,7 +26,7 @@ export default function Whiteboard({
   onZoomIn,
   onZoomOut,
   onResetZoom,
-   userName
+  userName
 }: WhiteboardProps) {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -81,7 +80,7 @@ export default function Whiteboard({
 
   return (
     <div className={`
-      ${isFullscreen 
+      whiteboard-container ${isFullscreen 
         ? "fixed inset-4 bg-white dark:bg-gray-900 rounded-xl shadow-2xl border-2 z-50 transition-all duration-300" 
         : "relative w-full h-[600px] bg-[#fafafa] dark:bg-gray-900 rounded-xl border-2 border-gray-300 dark:border-gray-600 transition-all duration-300"
       } overflow-hidden
@@ -100,21 +99,21 @@ export default function Whiteboard({
         }}
       />
       
-     {/* Ikioi Header in Focus Mode - Top Left */}
-{isFullscreen && (
-  <div className="absolute top-4 left-4 z-50">
-    <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border rounded-lg px-4 py-2 shadow-lg">
-      <div className="flex items-center gap-2 text-sm">
-        <span className="text-muted-foreground">Welcome to focus mode</span>
-        <span className="text-primary font-medium">
-          {userName || 'User'}
-        </span>
-        <span className="text-muted-foreground">|</span>
-        <span className="font-serif font-bold">Ikioi</span>
-      </div>
-    </div>
-  </div>
-)}
+      {/* Ikioi Header in Focus Mode - Top Left */}
+      {isFullscreen && (
+        <div className="absolute top-4 left-4 z-50">
+          <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border rounded-lg px-4 py-2 shadow-lg">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Welcome to focus mode</span>
+              <span className="text-primary font-medium">
+                {userName || 'User'}
+              </span>
+              <span className="text-muted-foreground">|</span>
+              <span className="font-serif font-bold">Ikioi</span>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Focus Mode Toolbar */}
       {isFullscreen && (
