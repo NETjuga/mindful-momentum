@@ -1,7 +1,7 @@
 // src/components/ikioi/IkioiColumn.tsx
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { GripVertical, Trash2, Plus, X } from 'lucide-react';
+import { GripVertical, Trash2, Plus, X, Calendar, Clock, ChevronRight, ChevronDown } from 'lucide-react';
 import { ikioiService } from '@/integrations/supabase/ikioiService';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -57,6 +57,7 @@ export default function IkioiColumn({
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
+  const [expandedSequence, setExpandedSequence] = useState<string | null>(null);
   const { user } = useAuth();
 
   // Dragging logic
@@ -297,6 +298,9 @@ export default function IkioiColumn({
     if (user) {
       await ikioiService.deleteSequence(sequenceId);
     }
+    if (expandedSequence === sequenceId) {
+      setExpandedSequence(null);
+    }
   };
 
   // Delete daily step from database
@@ -318,9 +322,19 @@ export default function IkioiColumn({
     }
   };
 
+  const toggleSequenceExpansion = (sequenceId: string) => {
+    setExpandedSequence(expandedSequence === sequenceId ? null : sequenceId);
+  };
+
+  const formatDueMonth = (dueMonth: string) => {
+  if (!dueMonth) return 'Set date';
+  const date = new Date(dueMonth + '-01');
+  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+};
+
   return (
     <div
-      className={`absolute w-80 bg-white dark:bg-gray-800 border-2 rounded-xl shadow-lg ${
+      className={`absolute w-80 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg ${
         isDragging ? 'cursor-grabbing z-50' : 'cursor-grab'
       } ${isDraggingBoard ? 'pointer-events-none' : ''}`}
       style={{
@@ -332,24 +346,21 @@ export default function IkioiColumn({
       }}
       onMouseDown={handleMouseDown}
     >
-      {/* Column Header with Color, Drag Handle and Delete */}
+      {/* Column Header */}
       <div 
-        className="flex items-center justify-between p-4 border-b rounded-t-xl"
+        className="flex items-center justify-between p-4 rounded-t-xl border-b border-gray-200 dark:border-gray-700"
         style={{ 
-          backgroundColor: column.color ? `${column.color}40` : 'transparent',
-          backgroundImage: column.color 
-            ? `linear-gradient(to right, ${column.color}20, transparent)`
-            : 'linear-gradient(to right, from-primary/5, to-transparent)'
+          backgroundColor: column.color ? `${column.color}20` : 'transparent',
         }}
       >
-        <div className="flex items-center gap-3">
-          <GripVertical className="h-4 w-4 text-muted-foreground" />
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <GripVertical className="h-4 w-4 text-gray-400 flex-shrink-0" />
           
-          {/* Color Selector */}
-          <div className="relative flex items-center">
+          {/* Color Picker */}
+          <div className="relative flex-shrink-0">
             <button
               onClick={() => setIsColorPickerOpen(!isColorPickerOpen)}
-              className="w-5 h-5 rounded-full border-2 border-white dark:border-gray-700 shadow-sm hover:scale-110 transition-transform"
+              className="w-5 h-5 rounded-full border-2 border-white dark:border-gray-800 shadow-sm hover:scale-110 transition-transform"
               style={{ backgroundColor: column.color || '#BAE1FF' }}
               title="Change color"
             />
@@ -360,8 +371,8 @@ export default function IkioiColumn({
                   className="fixed inset-0 z-40" 
                   onClick={() => setIsColorPickerOpen(false)}
                 />
-                <div className="absolute left-0 top-7 bg-white dark:bg-gray-800 border rounded-xl shadow-xl p-3 z-50 min-w-[180px]">
-                  <div className="text-xs font-medium text-muted-foreground mb-2">Choose a color</div>
+                <div className="absolute left-0 top-7 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-3 z-50 min-w-[180px]">
+                  <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Choose a color</div>
                   <div className="grid grid-cols-5 gap-2">
                     {[
                       '#FFB3BA', '#FFDFBA', '#FFFFBA', '#BAFFC9', '#BAE1FF',
@@ -372,8 +383,8 @@ export default function IkioiColumn({
                         onClick={() => handleColorChange(color)}
                         className={`w-7 h-7 rounded-full border-2 transition-all ${
                           column.color === color 
-                            ? 'border-gray-700 scale-110' 
-                            : 'border-gray-300 hover:scale-105'
+                            ? 'border-gray-700 dark:border-gray-300 scale-110' 
+                            : 'border-gray-300 dark:border-gray-600 hover:scale-105'
                         }`}
                         style={{ backgroundColor: color }}
                         title={color}
@@ -384,196 +395,259 @@ export default function IkioiColumn({
               </>
             )}
           </div>
-          
-          <span className="text-xs font-medium text-muted-foreground mt-0.5">
-            Drag to move
-          </span>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          {column.targetYear && (
-            <span className="text-xs font-medium px-2 py-1 bg-white/80 dark:bg-gray-800/80 rounded">
-              🎯 {column.targetYear}
-            </span>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onDelete(column.id)}
-            className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+
+          {/* Category and Goal in header */}
+          <div className="flex-1 min-w-0">
+            <select 
+              value={column.category}
+              onChange={(e) => handleCategoryChange(e.target.value)}
+              className="text-sm font-medium bg-transparent border-0 p-0 focus:outline-none focus:ring-0 w-full text-gray-900 dark:text-gray-100 truncate"
+            >
+              <option value="" className="text-gray-500">Select category</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat.toLowerCase()} className="text-gray-900">{cat}</option>
+              ))}
+            </select>
+            <input
+              type="text"
+              value={column.goal}
+              onChange={(e) => handleGoalChange(e.target.value)}
+              placeholder="What's your goal?"
+              className="text-lg font-semibold bg-transparent border-0 p-0 focus:outline-none focus:ring-0 w-full text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+            />
+          </div>
+
+          {/* Target year and delete */}
+          <div className="flex items-center gap-2">
+            {column.targetYear && (
+              <div className="text-xs font-medium px-2 py-1 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-full border border-gray-200 dark:border-gray-700">
+                🎯 {column.targetYear}
+              </div>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onDelete(column.id)}
+              className="h-8 w-8 p-0 hover:bg-red-50 dark:hover:bg-red-900/20"
+            >
+              <Trash2 className="h-4 w-4 text-gray-500 hover:text-red-500" />
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Column Content */}
-      <div className="p-4 space-y-4">
-        {/* Category Selection */}
-        <div>
-          <label className="block text-sm font-medium text-muted-foreground mb-2">
-            What do you want?
-          </label>
+      <div className="p-4">
+        {/* Year Selection */}
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Calendar className="h-4 w-4 text-gray-400" />
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Target Year</span>
+          </div>
           <select 
-            value={column.category}
-            onChange={(e) => handleCategoryChange(e.target.value)}
-            className="w-full px-3 py-2 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+            value={column.targetYear || ''}
+            onChange={(e) => handleTargetYearChange(parseInt(e.target.value) || 0)}
+            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
           >
-            <option value="">Select category</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat.toLowerCase()}>{cat}</option>
-            ))}
+            <option value="">Select target year</option>
+            {Array.from({ length: 10 }, (_, i) => {
+              const year = new Date().getFullYear() + i;
+              return (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              );
+            })}
           </select>
         </div>
 
-        {/* Goal Input with Year */}
-        <div>
-          <label className="block text-sm font-medium text-muted-foreground mb-2">
-            Goal
-          </label>
-          <input
-            type="text"
-            value={column.goal}
-            onChange={(e) => handleGoalChange(e.target.value)}
-            placeholder="e.g., Pilot license"
-            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background mb-2"
-          />
-          
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground whitespace-nowrap">Target year:</span>
-            <select 
-              value={column.targetYear || ''}
-              onChange={(e) => handleTargetYearChange(parseInt(e.target.value) || 0)}
-              className="text-xs px-2 py-1 border rounded bg-background focus:outline-none focus:ring-1 focus:ring-primary flex-1"
+        {/* Sequences Section */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+              Sequences ({column.sequences.length})
+            </h3>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="h-8 text-xs"
+              onClick={() => onAddSequence(column.id)}
             >
-              <option value="">Select year</option>
-              {Array.from({ length: 10 }, (_, i) => {
-                const year = new Date().getFullYear() + i;
-                return (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                );
-              })}
-            </select>
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              Add Sequence
+            </Button>
           </div>
-          
-          {column.targetYear && (
-            <div className="text-xs text-muted-foreground mt-1">
-              {column.targetYear > new Date().getFullYear() 
-                ? `Complete in ${column.targetYear - new Date().getFullYear()} years` 
-                : 'Complete this year'}
+
+          {column.sequences.length === 0 ? (
+            <div className="text-center py-6 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
+              <Plus className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-sm text-gray-500 dark:text-gray-400">No sequences yet</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Add your first sequence to get started</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {column.sequences.map((sequence) => (
+                <div key={sequence.id} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                  
+                  {/* Sequence Header */}
+<div 
+  className="flex flex-col p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+  onClick={() => toggleSequenceExpansion(sequence.id)}
+>
+  <div className="flex items-center justify-between w-full">
+    <div className="flex items-center gap-3 flex-1 min-w-0">
+      <div className={`h-2 w-2 rounded-full ${expandedSequence === sequence.id ? 'bg-blue-500' : 'bg-gray-300'}`} />
+      <input
+        type="text"
+        value={sequence.description}
+        onChange={(e) => handleSequenceDescriptionChange(sequence.id, e.target.value)}
+        placeholder="Sequence name"
+        className="flex-1 bg-transparent border-0 p-0 focus:outline-none focus:ring-0 text-sm font-semibold text-gray-900 dark:text-gray-100 min-w-0"
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+    <div className="flex items-center gap-2">
+      <div className="text-xs text-gray-500">
+        {sequence.dailySteps.length} step{sequence.dailySteps.length !== 1 ? 's' : ''}
+      </div>
+      {expandedSequence === sequence.id ? (
+        <ChevronDown className="h-4 w-4 text-gray-400" />
+      ) : (
+        <ChevronRight className="h-4 w-4 text-gray-400" />
+      )}
+    </div>
+  </div>
+  
+  {/* Date row below sequence name */}
+<div className="flex items-center gap-2 text-gray-500 mt-1 ml-5">
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      // Trigger the date input programmatically
+      const input = e.currentTarget.nextElementSibling as HTMLInputElement;
+      input?.showPicker();
+    }}
+    className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-900/20 border border-transparent hover:border-orange-200 dark:hover:border-orange-800 transition-colors group"
+  >
+    <Calendar className="h-3.5 w-3.5 text-gray-400 group-hover:text-orange-600 dark:group-hover:text-orange-400" />
+    {sequence.dueMonth && (
+      <span className="text-xs text-gray-700 dark:text-gray-300 group-hover:text-orange-700 dark:group-hover:text-orange-300">
+        {formatDueMonth(sequence.dueMonth)}
+      </span>
+    )}
+    {!sequence.dueMonth && (
+      <span className="text-xs text-gray-500 dark:text-gray-400 group-hover:text-orange-600 dark:group-hover:text-orange-400">
+        Set date
+      </span>
+    )}
+  </button>
+  <input
+    type="month"
+    value={sequence.dueMonth || ''}
+    onChange={(e) => handleSequenceDueMonthChange(sequence.id, e.target.value)}
+    className="absolute opacity-0 w-0 h-0"
+    min={`${new Date().getFullYear()}-01`}
+    max={column.targetYear ? `${column.targetYear}-12` : `${new Date().getFullYear() + 5}-12`}
+  />
+</div>
+</div>
+
+                  {/* Daily Steps (Collapsible) */}
+                  {expandedSequence === sequence.id && (
+                    <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Daily Steps</span>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-7 text-xs"
+                          onClick={() => onAddDailyStep(column.id, sequence.id)}
+                        >
+                          <Plus className="h-3 w-3 mr-1.5" />
+                          Add Step
+                        </Button>
+                      </div>
+                      
+                      {sequence.dailySteps.length === 0 ? (
+                        <div className="text-center py-3 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">No daily steps yet</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {sequence.dailySteps.map((step) => (
+                            <div key={step.id} className="flex items-center gap-2 p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg">
+                              {/* Daily step name - 70% width */}
+                              <div className="flex-1 min-w-0 w-[70%]">
+                                <input
+                                  type="text"
+                                  value={step.description}
+                                  onChange={(e) => handleDailyStepDescriptionChange(sequence.id, step.id, e.target.value)}
+                                  placeholder="What to do daily?"
+                                  className="w-full bg-transparent border-0 p-0 focus:outline-none focus:ring-0 text-sm text-gray-900 dark:text-gray-100"
+                                />
+                              </div>
+                              
+                              {/* Time input - 30% width */}
+<div className="flex items-center justify-end gap-1 w-[30%]">
+  <div className="flex items-center gap-0.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5">
+    <Clock className="h-3 w-3 text-gray-500 flex-shrink-0" />
+    <input
+      type="number"
+      min="1"
+      max="480"
+      value={step.timeMinutes || ''}
+      onChange={(e) => handleDailyStepTimeChange(sequence.id, step.id, parseInt(e.target.value) || 0)}
+      className="w-12 text-xs bg-transparent border-0 p-0 focus:outline-none focus:ring-0 text-right text-gray-900 dark:text-gray-100"
+      placeholder="0"
+    />
+  </div>
+  <button 
+    onClick={() => deleteDailyStep(sequence.id, step.id)}
+    className="text-gray-400 hover:text-red-500 transition-colors p-1"
+  >
+    <X className="h-3.5 w-3.5" />
+  </button>
+</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Sequence Footer */}
+                  <div className="flex items-center justify-between px-3 py-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                    <button 
+  onClick={() => deleteSequence(sequence.id)}
+  className="text-xs text-gray-500 hover:text-red-500 transition-colors flex items-center gap-1"
+>
+  <Trash2 className="h-3 w-3" />
+  Remove
+</button>
+                    <div className="text-xs text-gray-500">
+                      Total: {sequence.dailySteps.reduce((sum, step) => sum + (step.timeMinutes || 0), 0)} min/day
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
 
-        {/* Sequences Section */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <label className="text-sm font-medium text-muted-foreground">
-              Sequences ({column.sequences.length})
-            </label>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="h-7 text-xs"
-              onClick={() => onAddSequence(column.id)}
-            >
-              <Plus className="h-3 w-3 mr-1" />
-              Add
-            </Button>
+        {/* Summary */}
+        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-600 dark:text-gray-400">Total sequences:</span>
+            <span className="font-medium text-gray-900 dark:text-gray-100">{column.sequences.length}</span>
           </div>
-          <div className="space-y-2 max-h-48 overflow-y-auto">
-            {column.sequences.map((sequence) => (
-              <div key={sequence.id} className="p-3 border rounded-lg bg-gray-50 dark:bg-gray-900">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="flex-1">
-                    <input
-                      type="text"
-                      value={sequence.description}
-                      onChange={(e) => handleSequenceDescriptionChange(sequence.id, e.target.value)}
-                      placeholder="Sequence description"
-                      className="w-full bg-transparent focus:outline-none text-sm"
-                    />
-                    <div className="mt-1 flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Due:</span>
-                      <input
-  type="month"
-  value={sequence.dueMonth || ''}
-  onChange={(e) => handleSequenceDueMonthChange(sequence.id, e.target.value)}
-  className="text-xs border rounded-lg px-2 py-1.5 bg-gray-50 border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-all w-full"
-  style={{ borderRadius: '0.75rem' }}
-  min={`${new Date().getFullYear()}-01`}
-  max={column.targetYear ? `${column.targetYear}-12` : `${new Date().getFullYear() + 5}-12`}
-/>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => deleteSequence(sequence.id)}
-                    className="text-red-500 hover:text-red-700"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-                
-                {/* Daily Steps */}
-                <div className="ml-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Daily steps:</span>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-6 text-xs"
-                      onClick={() => onAddDailyStep(column.id, sequence.id)}
-                    >
-                      <Plus className="h-3 w-3 mr-1" />
-                      Add step
-                    </Button>
-                  </div>
-                  {sequence.dailySteps.map((step) => (
-                    <div key={step.id} className="flex items-center gap-2 text-sm">
-                      <div className="flex-1 flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={step.description}
-                          onChange={(e) => handleDailyStepDescriptionChange(sequence.id, step.id, e.target.value)}
-                          placeholder="Daily action"
-                          className="flex-1 bg-transparent focus:outline-none text-xs"
-                        />
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            min="1"
-                            max="480"
-                            value={step.timeMinutes || ''}
-                            onChange={(e) => handleDailyStepTimeChange(sequence.id, step.id, parseInt(e.target.value) || 0)}
-                            className="w-14 text-xs border rounded px-1.5 py-1 bg-background text-right"
-                            placeholder="min"
-                          />
-                          <span className="text-xs text-muted-foreground">min</span>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => deleteDailyStep(sequence.id, step.id)}
-                        className="text-red-500 hover:text-red-700 text-xs"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-            {column.sequences.length === 0 && (
-              <div className="text-center py-4 text-muted-foreground text-sm border border-dashed rounded-lg">
-                Click "Add" to create your first sequence
-              </div>
-            )}
+          <div className="flex items-center justify-between text-sm mt-1">
+            <span className="text-gray-600 dark:text-gray-400">Total daily steps:</span>
+            <span className="font-medium text-gray-900 dark:text-gray-100">
+              {column.sequences.reduce((sum, seq) => sum + seq.dailySteps.length, 0)}
+            </span>
           </div>
         </div>
       </div>
     </div>
   );
 }
-
-
