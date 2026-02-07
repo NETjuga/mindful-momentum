@@ -462,21 +462,23 @@ export default function IkioiColumn({
         </div>
 
         {/* Sequences Section */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-              Sequences ({column.sequences.length})
-            </h3>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="h-8 text-xs"
-              onClick={() => onAddSequence(column.id)}
-            >
-              <Plus className="h-3.5 w-3.5 mr-1.5" />
-              Add Sequence
-            </Button>
-          </div>
+<div className="space-y-3">
+  <div className="flex items-center justify-between mb-1">
+    <div className="flex items-center gap-2">
+      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+        Sequences ({column.sequences.length})
+      </span>
+    </div>
+    <Button 
+      variant="outline" 
+      size="sm" 
+      className="h-8 text-xs"
+      onClick={() => onAddSequence(column.id)}
+    >
+      <Plus className="h-3.5 w-3.5 mr-1.5" />
+      Add Sequence
+    </Button>
+  </div>
 
           {column.sequences.length === 0 ? (
             <div className="text-center py-6 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
