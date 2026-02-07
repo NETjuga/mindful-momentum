@@ -99,10 +99,8 @@ export default function Auth() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-            <Leaf className="w-6 h-6 text-primary-foreground" />
-          </div>
-          <span className="font-serif text-2xl font-semibold">Momentum</span>
+          
+          <span className="font-serif text-4xl font-semibold">Ikioi</span>
         </div>
 
         <Card className="card-elevated">
@@ -193,14 +191,9 @@ export default function Auth() {
         {/* Benefits */}
         <div className="mt-8 text-center space-y-2">
           <p className="text-sm text-muted-foreground">
-            🌱 Goals that adapt when you struggle
+             A productivity app, built for ADHD.
           </p>
-          <p className="text-sm text-muted-foreground">
-            💚 No streak guilt — just momentum
-          </p>
-          <p className="text-sm text-muted-foreground">
-            📱 Works on web and mobile
-          </p>
+          
         </div>
       </div>
     </div>

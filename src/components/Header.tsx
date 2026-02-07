@@ -10,10 +10,8 @@ export function Header() {
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         {/* Logo */}
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <Leaf className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <span className="font-serif text-xl font-semibold">Momentum</span>
+          
+          <span className="font-serif text-3xl font-semibold">Ikioi</span>
         </div>
 
         {/* User section */}

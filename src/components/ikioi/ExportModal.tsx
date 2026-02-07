@@ -138,37 +138,64 @@ const ExportModal: React.FC<ExportModalProps> = ({
               </div>
             </div>
 
-            {/* Layout Selection (only for PDF) */}
-            {options.format === 'pdf' && (
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2 text-sm font-medium">
-                  <Layers className="h-4 w-4" />
-                  Layout Style
-                </Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { value: 'whiteboard', label: 'Board', icon: Eye },
-                    { value: 'table', label: 'Table', icon: Table },
-                    { value: 'hierarchy', label: 'Tree', icon: BarChart }
-                  ].map((layout) => (
-                    <button
-                      key={layout.value}
-                      className={`p-3 rounded-lg border-2 transition-all ${
-                        options.layout === layout.value
-                          ? 'border-primary bg-primary/5'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                      }`}
-                      onClick={() => handleLayoutChange(layout.value as any)}
-                    >
-                      <div className="flex flex-col items-center gap-1">
-                        <layout.icon className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                        <span className="text-xs font-medium">{layout.label}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
+           
+{options.format === 'pdf' && (
+  <div className="space-y-2">
+    <Label className="flex items-center gap-2 text-sm font-medium">
+      <Layers className="h-4 w-4" />
+      Layout Style
+    </Label>
+    <div className="grid grid-cols-3 gap-2">
+      {[
+        { value: 'whiteboard', label: 'Board', icon: Eye, disabled: true, tooltip: 'Coming soon' },
+        { value: 'table', label: 'Table', icon: Table, disabled: false, tooltip: 'Spreadsheet view' },
+        { value: 'hierarchy', label: 'Tree', icon: BarChart, disabled: false, tooltip: 'Hierarchy view' }
+      ].map((layout) => (
+        <button
+          key={layout.value}
+          disabled={layout.disabled}
+          title={layout.tooltip}
+          className={`p-3 rounded-lg border-2 transition-all ${
+            options.layout === layout.value
+              ? 'border-primary bg-primary/5'
+              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+          } ${layout.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+          onClick={() => !layout.disabled && handleLayoutChange(layout.value as any)}
+        >
+          <div className="flex flex-col items-center gap-1">
+            <layout.icon className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+            <span className="text-xs font-medium">{layout.label}</span>
+            {layout.disabled && (
+              <span className="text-[10px] text-gray-500">Soon</span>
             )}
+          </div>
+        </button>
+      ))}
+    </div>
+    
+    {/* Optional: Add a helpful description */}
+    <div className="text-xs text-gray-500 mt-2">
+      {options.layout === 'table' && (
+        <div className="flex items-start gap-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+          <Table className="h-3 w-3 mt-0.5 text-blue-600 dark:text-blue-400" />
+          <span>Table: Best for printing and data analysis</span>
+        </div>
+      )}
+      {options.layout === 'hierarchy' && (
+        <div className="flex items-start gap-2 p-2 bg-green-50 dark:bg-green-900/20 rounded">
+          <BarChart className="h-3 w-3 mt-0.5 text-green-600 dark:text-green-400" />
+          <span>Tree: Shows the hierarchical structure of your goals</span>
+        </div>
+      )}
+      {options.layout === 'whiteboard' && (
+        <div className="flex items-start gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded">
+          <Eye className="h-3 w-3 mt-0.5 text-gray-600 dark:text-gray-400" />
+          <span>Whiteboard layout coming in a future update</span>
+        </div>
+      )}
+    </div>
+  </div>
+)}
 
             {/* Options */}
             <div className="space-y-3">

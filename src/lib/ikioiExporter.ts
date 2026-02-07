@@ -1,10 +1,11 @@
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import type { IkioiColumnData } from '@/components/ikioi/IkioiColumn';
+import autoTable, { Color } from 'jspdf-autotable';
 
 // Update the ExportOptions interface:
 export interface ExportOptions {
-  format: 'pdf' | 'png' | 'json' | 'csv'; // ADD THIS LINE
+  format: 'pdf' | 'png' | 'json' | 'csv';
   layout: 'whiteboard' | 'table' | 'hierarchy';
   includeMetadata: boolean;
   includeStatistics: boolean;
@@ -18,7 +19,6 @@ export interface ExportProgress {
   message: string;
 }
 
-
 export class IkioiExporter {
   private pdf: jsPDF;
   private options: ExportOptions;
@@ -26,10 +26,26 @@ export class IkioiExporter {
   private pageWidth = 210; // A4 width in mm
   private pageHeight = 297; // A4 height in mm
   private currentY = 0;
-  private pageNumber = 1;
+  
+  // SIMPLIFIED COLOR PALETTE with exact sage green
+  private colors = {
+    // Primary sage green - exact from your CSS
+    primary: [115, 168, 124] as [number, number, number], // hsl(142 35% 45%) = #73A87C
+    
+    // Warm amber (secondary accent)
+    accent: [224, 172, 105] as [number, number, number], // hsl(35, 85%, 55%)
+    
+    // Text colors
+    text: [51, 51, 51] as [number, number, number],      // #333 - Dark gray/black
+    textLight: [102, 102, 102] as [number, number, number], // #666 - Medium gray
+    textLighter: [153, 153, 153] as [number, number, number], // #999 - Light gray
+    
+    // Backgrounds
+    background: [252, 250, 245] as [number, number, number], // hsl(40, 33%, 98%) - Warm cream
+    border: [221, 221, 221] as [number, number, number]      // #DDD - Light border
+  };
 
   constructor(options: Partial<ExportOptions> = {}) {
-    // Create complete options with all required fields
     const defaultOptions: ExportOptions = {
       format: 'pdf',
       layout: 'whiteboard',
@@ -45,7 +61,7 @@ export class IkioiExporter {
     };
 
     this.pdf = new jsPDF({
-      orientation: 'landscape',
+      orientation: 'portrait',
       unit: 'mm',
       format: 'a4'
     });
@@ -68,7 +84,6 @@ export class IkioiExporter {
     onProgress?: (progress: ExportProgress) => void
   ): Promise<Blob> {
     try {
-      // Update progress
       onProgress?.({
         current: 1,
         total: 4,
@@ -77,7 +92,7 @@ export class IkioiExporter {
 
       // Add header
       await this.addHeader(userName);
-      this.currentY += 15;
+      this.currentY += 10;
 
       // Add metadata if enabled
       if (this.options.includeMetadata) {
@@ -87,7 +102,7 @@ export class IkioiExporter {
           message: 'Adding metadata...'
         });
         await this.addMetadata(statistics);
-        this.currentY += 20;
+        this.currentY += 10;
       }
 
       // Add content based on layout
@@ -105,7 +120,7 @@ export class IkioiExporter {
           await this.renderTableLayout(columns);
           break;
         case 'hierarchy':
-          await this.renderHierarchyLayout(columns);
+          await this.renderSimpleHierarchy(columns);
           break;
       }
 
@@ -128,41 +143,39 @@ export class IkioiExporter {
   }
 
   /**
-   * Export as image (screenshot of whiteboard)
+   * Export as image
    */
- // In the exportAsImage method, add better error handling:
-async exportAsImage(
-  element: HTMLElement,
-  fileName: string
-): Promise<Blob> {
-  try {
-    // Ensure html2canvas is loaded
-    if (typeof html2canvas === 'undefined') {
-      throw new Error('html2canvas library not loaded');
-    }
-    
-    const canvas = await html2canvas(element, {
-      scale: 1.5, // Reduced from 2 for better performance
-      backgroundColor: '#ffffff',
-      useCORS: true,
-      logging: false,
-      allowTaint: true
-    });
+  async exportAsImage(
+    element: HTMLElement,
+    fileName: string
+  ): Promise<Blob> {
+    try {
+      if (typeof html2canvas === 'undefined') {
+        throw new Error('html2canvas library not loaded');
+      }
+      
+      const canvas = await html2canvas(element, {
+        scale: 1.5,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        logging: false,
+        allowTaint: true
+      });
 
-    return new Promise((resolve, reject) => {
-      canvas.toBlob((blob) => {
-        if (blob) {
-          resolve(blob);
-        } else {
-          reject(new Error('Failed to create image from canvas'));
-        }
-      }, 'image/png', 0.95); // Slightly reduced quality for smaller files
-    });
-  } catch (error) {
-    console.error('Image export error:', error);
-    throw new Error(`Failed to export image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error('Failed to create image from canvas'));
+          }
+        }, 'image/png', 0.95);
+      });
+    } catch (error) {
+      console.error('Image export error:', error);
+      throw new Error(`Failed to export image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
-}
  
   /**
    * Export as JSON data
@@ -212,7 +225,6 @@ async exportAsImage(
       'Goal',
       'Target Year',
       'Sequence',
-      'Due Month',
       'Daily Step',
       'Time (min)',
       'Completed'
@@ -226,7 +238,7 @@ async exportAsImage(
           column.category,
           column.goal,
           column.targetYear.toString(),
-          '', '', '', '', ''
+          '', '', '', ''
         ]);
       } else {
         column.sequences.forEach(sequence => {
@@ -236,7 +248,6 @@ async exportAsImage(
               column.goal,
               column.targetYear.toString(),
               sequence.description,
-              sequence.dueMonth,
               '', '', ''
             ]);
           } else {
@@ -246,7 +257,6 @@ async exportAsImage(
                 column.goal,
                 column.targetYear.toString(),
                 sequence.description,
-                sequence.dueMonth,
                 step.description,
                 step.timeMinutes.toString(),
                 step.completed ? 'Yes' : 'No'
@@ -281,65 +291,102 @@ async exportAsImage(
 
   // ============ PRIVATE METHODS ============
 
-  private async addHeader(userName: string): Promise<void> {
-    // Title
-    this.pdf.setFontSize(24);
-    this.pdf.setTextColor(41, 128, 185); // Primary blue
-    this.pdf.text('Ikioi Goals Whiteboard', this.margin, this.currentY);
+ private async addHeader(userName: string): Promise<void> {
+  const startY = this.currentY;
 
-    // Subtitle
-    this.pdf.setFontSize(12);
-    this.pdf.setTextColor(100, 100, 100);
-    this.pdf.text(`Exported for: ${userName}`, this.margin, this.currentY + 8);
+  /* ================================
+     LEFT — BRAND
+  ================================= */
+  this.pdf.setFont('times', 'bold'); // serif, semi-bold equivalent
+  this.pdf.setFontSize(24);
+  this.pdf.setTextColor(...this.colors.primary);
+  this.pdf.text('Ikioi', this.margin, startY);
 
-    // Date
-    const dateStr = new Date().toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-    this.pdf.text(`Generated: ${dateStr}`, this.pageWidth - this.margin, this.currentY + 8, {
-      align: 'right'
-    });
+  this.pdf.setFont('times', 'normal');
+  this.pdf.setFontSize(12);
+  this.pdf.setTextColor(...this.colors.textLight);
+  this.pdf.text('Productivity System', this.margin, startY + 8);
 
-    // Separator line
-    this.pdf.setDrawColor(200, 200, 200);
-    this.pdf.line(this.margin, this.currentY + 15, this.pageWidth - this.margin, this.currentY + 15);
-  }
+  /* ================================
+     RIGHT — USER INFO
+  ================================= */
+  const dateStr = new Date().toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  });
+
+  this.pdf.setFont('times', 'bold');
+  this.pdf.setFontSize(16);
+  this.pdf.setTextColor(...this.colors.primary);
+  this.pdf.text('Ikioi', this.pageWidth - this.margin, startY, { align: 'right' });
+
+  this.pdf.setFont('times', 'normal');
+  this.pdf.setFontSize(9);
+  this.pdf.setTextColor(...this.colors.textLight);
+  this.pdf.text(`For: ${userName}`, this.pageWidth - this.margin, startY + 8, { align: 'right' });
+  this.pdf.text(`Date: ${dateStr}`, this.pageWidth - this.margin, startY + 13, { align: 'right' });
+
+  /* ================================
+     SEPARATOR
+  ================================= */
+  this.pdf.setDrawColor(...this.colors.border);
+  this.pdf.setLineWidth(0.5);
+  this.pdf.line(
+    this.margin,
+    startY + 18,
+    this.pageWidth - this.margin,
+    startY + 18
+  );
+
+  /* ================================
+     ADVANCE CURSOR (IMPORTANT)
+  ================================= */
+  this.currentY = startY + 30;
+}
+
 
   private async addMetadata(statistics: any): Promise<void> {
     if (!this.options.includeStatistics) return;
 
-    this.pdf.setFontSize(14);
-    this.pdf.setTextColor(50, 50, 50);
+    this.pdf.setFontSize(12);
+    this.pdf.setFont('helvetica', 'bold');
+    this.pdf.setTextColor(this.colors.text[0], this.colors.text[1], this.colors.text[2]);
     this.pdf.text('Summary', this.margin, this.currentY);
-    this.currentY += 10;
+    this.currentY += 8;
 
     const stats = [
-      { label: 'Goals', value: statistics.goalsCount, color: [66, 153, 225] },
-      { label: 'Sequences', value: statistics.sequencesCount, color: [72, 187, 120] },
-      { label: 'Daily Steps', value: statistics.dailyStepsCount, color: [237, 137, 54] },
-      { label: 'Daily Time', value: `${Math.round(statistics.totalDailyTime / 60)}h`, color: [245, 101, 101] }
+      { label: 'Goals', value: statistics.goalsCount },
+      { label: 'Sequences', value: statistics.sequencesCount },
+      { label: 'Daily Steps', value: statistics.dailyStepsCount },
+      { label: 'Total Time', value: `${Math.round(statistics.totalDailyTime / 60)}h ${statistics.totalDailyTime % 60}m` }
     ];
 
     const boxWidth = (this.pageWidth - (this.margin * 2) - 15) / 4;
-    const boxHeight = 25;
+    const boxHeight = 20;
 
     stats.forEach((stat, index) => {
       const x = this.margin + (index * (boxWidth + 5));
 
-      // Box background with color
-      this.pdf.setFillColor(stat.color[0], stat.color[1], stat.color[2]);
-      this.pdf.roundedRect(x, this.currentY, boxWidth, boxHeight, 3, 3, 'F');
+      // Simple clean cards without colored borders
+      this.pdf.setDrawColor(this.colors.border[0], this.colors.border[1], this.colors.border[2]);
+      this.pdf.setFillColor(255, 255, 255);
+      this.pdf.rect(x, this.currentY, boxWidth, boxHeight, 'FD');
 
-      // White text
-      this.pdf.setTextColor(255, 255, 255);
-      this.pdf.setFontSize(18);
-      this.pdf.text(stat.value.toString(), x + boxWidth / 2, this.currentY + 12, { align: 'center' });
+      // Number - primary color for the first stat, text for others
+      this.pdf.setFontSize(16);
+      this.pdf.setFont('helvetica', 'bold');
+      if (index === 0) {
+        this.pdf.setTextColor(this.colors.primary[0], this.colors.primary[1], this.colors.primary[2]);
+      } else {
+        this.pdf.setTextColor(this.colors.text[0], this.colors.text[1], this.colors.text[2]);
+      }
+      this.pdf.text(stat.value.toString(), x + boxWidth / 2, this.currentY + 10, { align: 'center' });
 
-      this.pdf.setFontSize(10);
-      this.pdf.text(stat.label.toUpperCase(), x + boxWidth / 2, this.currentY + 20, { align: 'center' });
+      // Label
+      this.pdf.setFontSize(9);
+      this.pdf.setTextColor(this.colors.textLight[0], this.colors.textLight[1], this.colors.textLight[2]);
+      this.pdf.text(stat.label.toUpperCase(), x + boxWidth / 2, this.currentY + 16, { align: 'center' });
     });
 
     this.currentY += boxHeight + 10;
@@ -347,9 +394,7 @@ async exportAsImage(
 
   private async renderWhiteboardLayout(columns: IkioiColumnData[]): Promise<void> {
     if (columns.length === 0) {
-      this.pdf.setFontSize(14);
-      this.pdf.setTextColor(150, 150, 150);
-      this.pdf.text('No goals to display', this.margin + 50, this.currentY + 50);
+      this.addNoDataMessage();
       return;
     }
 
@@ -359,7 +404,6 @@ async exportAsImage(
     const colsPerRow = 2;
 
     columns.forEach((column, index) => {
-      // Check if we need new page
       const row = Math.floor(index / colsPerRow);
       const col = index % colsPerRow;
       const yPos = this.currentY + (row * (colHeight + gap));
@@ -371,181 +415,454 @@ async exportAsImage(
       }
 
       const xPos = this.margin + (col * (colWidth + gap));
-      this.renderColumn(column, xPos, yPos, colWidth, colHeight);
+      this.renderColumnCard(column, xPos, yPos, colWidth, colHeight);
     });
 
     this.currentY += Math.ceil(columns.length / colsPerRow) * (colHeight + gap);
   }
 
-  private renderColumn(
-    column: IkioiColumnData,
-    x: number,
-    y: number,
-    width: number,
-    height: number
-  ): void {
-    // Background color
-    const rgb = this.hexToRgb(column.color);
-    this.pdf.setFillColor(rgb[0], rgb[1], rgb[2]);
-    this.pdf.roundedRect(x, y, width, 15, 2, 2, 'F');
-
-    // Category
-    this.pdf.setFontSize(9);
-    this.pdf.setTextColor(255, 255, 255);
-    this.pdf.text(column.category || 'General', x + 5, y + 10);
-
-    // Goal title
-    this.pdf.setFontSize(11);
-    this.pdf.setTextColor(0, 0, 0);
-    const goalText = this.wrapText(column.goal, width - 10);
-    this.pdf.text(goalText, x + 5, y + 25, { maxWidth: width - 10 });
-
-    // Target year
-    this.pdf.setFontSize(9);
-    this.pdf.setTextColor(100, 100, 100);
-    this.pdf.text(`🎯 ${column.targetYear}`, x + 5, y + 35);
-
-    // Sequences count
-    const seqCount = column.sequences.length;
-    this.pdf.text(`📋 ${seqCount} sequence${seqCount !== 1 ? 's' : ''}`, x + width - 5, y + 35, { align: 'right' });
-
-    // Preview first sequence
-    if (column.sequences.length > 0) {
-      this.pdf.setDrawColor(220, 220, 220);
-      this.pdf.line(x, y + 40, x + width, y + 40);
-
-      const firstSeq = column.sequences[0];
-      this.pdf.setFontSize(8);
-      this.pdf.setTextColor(80, 80, 80);
-      
-      const seqText = firstSeq.description.length > 25 
-        ? firstSeq.description.substring(0, 25) + '...' 
-        : firstSeq.description;
-      
-      this.pdf.text(`→ ${seqText}`, x + 5, y + 47);
-      
-      if (firstSeq.dueMonth) {
-        this.pdf.text(`📅 ${firstSeq.dueMonth}`, x + width - 5, y + 47, { align: 'right' });
-      }
-
-      // Show more indicator
-      if (column.sequences.length > 1) {
-        this.pdf.setTextColor(150, 150, 150);
-        this.pdf.text(`+${column.sequences.length - 1} more...`, x + width - 5, y + height - 5, { align: 'right' });
-      }
-    }
-  }
+//renderTABLELAYOUT
 
   private async renderTableLayout(columns: IkioiColumnData[]): Promise<void> {
-    this.pdf.setFontSize(16);
-    this.pdf.setTextColor(50, 50, 50);
-    this.pdf.text('Goals Detailed View', this.margin, this.currentY);
-    this.currentY += 10;
-
-    // Table headers
-    const headers = ['Category', 'Goal', 'Year', 'Sequence', 'Due', 'Steps', 'Time'];
-    const colWidths = [25, 40, 15, 50, 20, 20, 20];
-
-    // Header background
-    this.pdf.setFillColor(240, 240, 240);
-    this.pdf.rect(this.margin, this.currentY, this.pageWidth - (this.margin * 2), 10, 'F');
-
-    // Header text
-    this.pdf.setFontSize(10);
-    this.pdf.setTextColor(0, 0, 0);
-    let x = this.margin;
-    headers.forEach((header, i) => {
-      this.pdf.text(header, x + 2, this.currentY + 7);
-      x += colWidths[i];
-    });
-
-    this.currentY += 10;
-
-    // Data rows
-    let rowIndex = 0;
-    for (const column of columns) {
-      if (this.currentY > this.pageHeight - this.margin - 20) {
-        this.pdf.addPage();
-        this.currentY = this.margin;
-      }
-
-      if (column.sequences.length === 0) {
-        this.addTableRow([column.category, column.goal, column.targetYear.toString(), '', '', '', ''], colWidths, rowIndex);
-        rowIndex++;
-        this.currentY += 8;
-      } else {
-        for (const seq of column.sequences) {
-          if (this.currentY > this.pageHeight - this.margin - 20) {
-            this.pdf.addPage();
-            this.currentY = this.margin;
-            rowIndex = 0;
-          }
-
-          const dailySteps = seq.dailySteps.length;
-          const totalTime = seq.dailySteps.reduce((sum, step) => sum + step.timeMinutes, 0);
-          
-          this.addTableRow([
-            column.category,
-            column.goal,
-            column.targetYear.toString(),
-            seq.description,
-            seq.dueMonth || '',
-            dailySteps.toString(),
-            `${Math.round(totalTime / 60)}h`
-          ], colWidths, rowIndex);
-
-          rowIndex++;
-          this.currentY += 8;
-        }
-      }
-    }
+  if (columns.length === 0) {
+    this.addNoDataMessage();
+    return;
   }
 
-  private async renderHierarchyLayout(columns: IkioiColumnData[]): Promise<void> {
-    // Simplified hierarchy - will implement based on your needs
-    this.pdf.setFontSize(16);
-    this.pdf.setTextColor(50, 50, 50);
-    this.pdf.text('Goals Hierarchy', this.margin, this.currentY);
-    this.currentY += 10;
+  columns.forEach((column, columnIndex) => {
+    // Check if we need a page break before starting a new column
+    // Estimate minimum space needed for a column header: ~25mm
+    if (this.currentY + 25 > this.pageHeight - this.margin) {
+      this.pdf.addPage();
+      this.currentY = this.margin;
+    }
 
-    columns.forEach((column, colIndex) => {
-      if (this.currentY > this.pageHeight - this.margin - 50) {
+    /* ================================
+       CATEGORY
+    ================================= */
+    this.pdf.setFontSize(8);
+    this.pdf.setTextColor(130, 130, 130);
+    this.pdf.text(column.category.toUpperCase(), this.margin, this.currentY);
+    this.currentY += 4;
+
+    /* ================================
+       GOAL TITLE
+    ================================= */
+    this.pdf.setFontSize(11);
+    this.pdf.setFont(undefined, 'bold');
+    this.pdf.setTextColor(...this.colors.text);
+    this.pdf.text(column.goal, this.margin, this.currentY);
+
+    /* ================================
+       TARGET YEAR
+    ================================= */
+    this.pdf.setFontSize(8);
+    this.pdf.setFont(undefined, 'normal');
+    this.pdf.setTextColor(120, 120, 120);
+    this.pdf.text(
+      `Target ${column.targetYear}`,
+      this.pdf.internal.pageSize.getWidth() - this.margin,
+      this.currentY,
+      { align: 'right' }
+    );
+
+    this.currentY += 8; // Increased from 6 for better spacing
+
+    /* ================================
+       SEQUENCES (TABLES)
+    ================================= */
+    column.sequences.forEach((sequence, seqIndex) => {
+      // Calculate exact space needed for this sequence
+      let spaceNeeded = 0;
+      
+      if (sequence.dailySteps.length === 0) {
+        // Empty sequence: just the header line
+        spaceNeeded = 12; // 6 for header + 6 for spacing
+      } else {
+        // Sequence with table: header + table rows + spacing
+        const tableHeaderHeight = 10; // Approximate
+        const rowHeight = 6; // Approximate per row
+        spaceNeeded = tableHeaderHeight + (sequence.dailySteps.length * rowHeight) + 6;
+      }
+      
+      // Check if this sequence fits on current page
+      // Leave at least 50mm for summary if this is the last sequence of last column
+      const isLastSequence = columnIndex === columns.length - 1 && 
+                            seqIndex === column.sequences.length - 1;
+      const minSpaceForSummary = isLastSequence ? 50 : 0;
+      
+      if (this.currentY + spaceNeeded + minSpaceForSummary > this.pageHeight - this.margin) {
+        // Only break if it truly won't fit
         this.pdf.addPage();
         this.currentY = this.margin;
       }
 
-      // Column header
-      this.pdf.setFontSize(14);
-      this.pdf.setTextColor(41, 128, 185);
-      this.pdf.text(`${column.category}: ${column.goal}`, this.margin, this.currentY);
-      this.currentY += 8;
+      const sequenceTime = sequence.dailySteps.reduce(
+        (s, d) => s + d.timeMinutes,
+        0
+      );
+      const sequenceTimeText =
+        sequenceTime >= 60
+          ? `${Math.floor(sequenceTime / 60)}h ${sequenceTime % 60}m`
+          : `${sequenceTime}m`;
 
-      // Sequences
-      column.sequences.forEach((seq, seqIndex) => {
-        if (this.currentY > this.pageHeight - this.margin - 30) {
-          this.pdf.addPage();
-          this.currentY = this.margin;
-        }
+      if (sequence.dailySteps.length === 0) {
+        // Sequence header (no table)
+        this.pdf.setFontSize(9);
+        this.pdf.setFont(undefined, 'bold');
+        this.pdf.setTextColor(84, 149, 115); // Sage green
+        this.pdf.text(sequence.description, this.margin + 4, this.currentY);
 
-        this.pdf.setFontSize(11);
-        this.pdf.setTextColor(0, 0, 0);
-        this.pdf.text(`  • ${seq.description}`, this.margin + 10, this.currentY);
-        this.currentY += 6;
+        this.pdf.setFontSize(8);
+        this.pdf.setFont(undefined, 'italic');
+        this.pdf.setTextColor(150, 150, 150);
+        this.pdf.text(
+          'No daily steps defined',
+          this.pageWidth - this.margin,
+          this.currentY,
+          { align: 'right' }
+        );
 
-        // Daily steps
-        seq.dailySteps.forEach((step, stepIndex) => {
-          this.pdf.setFontSize(9);
-          this.pdf.setTextColor(100, 100, 100);
-          this.pdf.text(`    ◦ ${step.description} (${step.timeMinutes}min)`, this.margin + 20, this.currentY);
-          this.currentY += 5;
+        this.currentY += 8; // Increased from 6
+      } else {
+        autoTable(this.pdf, {
+          startY: this.currentY,
+          head: [
+            [
+              {
+                content: sequence.description,
+                colSpan: 2,
+                styles: {
+                  fontStyle: 'bold',
+                  halign: 'left',
+                  textColor: [84, 149, 115] // Sage green
+                }
+              }
+            ],
+            ['Steps:', `Time: ${sequenceTimeText}`]
+          ],
+          body: sequence.dailySteps.map(step => {
+            const timeText =
+              step.timeMinutes >= 60
+                ? `${Math.floor(step.timeMinutes / 60)}h ${step.timeMinutes % 60}m`
+                : `${step.timeMinutes}m`;
+
+            return [step.description, timeText];
+          }),
+          theme: 'plain',
+          styles: {
+            fontSize: 8,
+            textColor: this.colors.text as Color,
+            cellPadding: { left: 4, top: 2, bottom: 2 },
+            lineWidth: 0.1
+          },
+          headStyles: {
+            fontSize: 8,
+            fontStyle: 'bold',
+            textColor: [80, 80, 80],
+            fillColor: [245, 247, 250],
+            lineWidth: 0.1
+          },
+          columnStyles: {
+            0: { cellWidth: 110 },
+            1: { cellWidth: 25, halign: 'right' }
+          },
+          margin: { left: this.margin + 6 },
+          tableWidth: this.pageWidth - (this.margin * 2) - 12,
+          // Let autoTable handle page breaks internally
+          didDrawPage: (data) => {
+            // Update currentY to the actual final position
+            this.currentY = data.cursor.y;
+          }
         });
 
-        this.currentY += 3;
-      });
+        // Get the final Y position from the table
+        const finalY = (this.pdf as any).lastAutoTable?.finalY;
+        if (finalY) {
+          this.currentY = finalY;
+        } else {
+          // Estimate position if finalY not available
+          this.currentY += 10 + (sequence.dailySteps.length * 6);
+        }
+      }
 
-      this.currentY += 10;
+      // Spacing between sequences
+      this.currentY += 6;
     });
+
+    // Spacing between columns (only if not last column)
+    if (columnIndex < columns.length - 1) {
+      this.currentY += 10;
+    }
+  });
+
+  // Check if summary fits on current page
+  // Summary box is about 50mm tall
+  if (this.currentY + 50 > this.pageHeight - this.margin) {
+    this.pdf.addPage();
+    this.currentY = this.margin;
   }
+
+  // Add the summary at the end
+  this.addSimpleSummary(columns);
+}
+
+
+
+  private async renderSimpleHierarchy(columns: IkioiColumnData[]): Promise<void> {
+  if (columns.length === 0) {
+    this.addNoDataMessage();
+    return;
+  }
+
+  /* ================================
+     TITLE (compact)
+  ================================= */
+  this.pdf.setFontSize(15);
+  this.pdf.setFont('helvetica', 'bold');
+  this.pdf.setTextColor(...this.colors.text);
+  this.pdf.text('Goals Hierarchy', this.margin, this.currentY);
+  this.currentY += 7;
+
+  this.pdf.setFontSize(9);
+  this.pdf.setFont('helvetica', 'normal');
+  this.pdf.setTextColor(...this.colors.textLight);
+  this.pdf.text(
+    'How goals break down into sequences and daily actions',
+    this.margin,
+    this.currentY
+  );
+  this.currentY += 12;
+
+  for (const column of columns) {
+    this.ensureSpace(45);
+
+    /* ================================
+       GOAL HEADER
+    ================================= */
+    this.pdf.setFontSize(8);
+    this.pdf.setFont('helvetica', 'bold');
+    this.pdf.setTextColor(...this.colors.primary);
+    this.pdf.text(column.category.toUpperCase(), this.margin, this.currentY);
+    this.currentY += 4;
+
+    this.pdf.setFontSize(11);
+    this.pdf.setTextColor(...this.colors.text);
+    this.pdf.text(column.goal, this.margin, this.currentY);
+
+    this.pdf.setFontSize(8);
+    this.pdf.setTextColor(...this.colors.textLight);
+    this.pdf.text(
+      `Target ${column.targetYear}`,
+      this.pageWidth - this.margin,
+      this.currentY,
+      { align: 'right' }
+    );
+    this.currentY += 7;
+
+    /* ================================
+       SEQUENCES
+    ================================= */
+    if (column.sequences.length === 0) {
+      this.pdf.setFontSize(8);
+      this.pdf.setFont('helvetica', 'italic');
+      this.pdf.setTextColor(...this.colors.textLighter);
+      this.pdf.text('No sequences defined', this.margin + 6, this.currentY);
+      this.currentY += 6;
+    }
+
+    for (const sequence of column.sequences) {
+      this.ensureSpace(30);
+
+      // Vertical guide line (lighter + tighter)
+      this.pdf.setDrawColor(...this.colors.border);
+      this.pdf.setLineWidth(0.25);
+      this.pdf.line(
+        this.margin + 3,
+        this.currentY - 3,
+        this.margin + 3,
+        this.currentY + 4
+      );
+
+      // Sequence label
+      this.pdf.setFontSize(10);
+      this.pdf.setFont('helvetica', 'bold');
+      this.pdf.setTextColor(...this.colors.text);
+      this.pdf.text(sequence.description, this.margin + 8, this.currentY);
+
+      // Sequence total time
+      const totalTime = sequence.dailySteps.reduce((s, d) => s + d.timeMinutes, 0);
+      const timeText =
+        totalTime >= 60
+          ? `${Math.floor(totalTime / 60)}h ${totalTime % 60}m`
+          : `${totalTime}m`;
+
+      this.pdf.setFontSize(8);
+      this.pdf.setTextColor(...this.colors.textLight);
+      this.pdf.text(
+        timeText,
+        this.pageWidth - this.margin,
+        this.currentY,
+        { align: 'right' }
+      );
+      this.currentY += 6;
+
+      /* ================================
+         DAILY STEPS
+      ================================= */
+      if (sequence.dailySteps.length === 0) {
+        this.pdf.setFontSize(7);
+        this.pdf.setFont('helvetica', 'italic');
+        this.pdf.setTextColor(...this.colors.textLighter);
+        this.pdf.text('No daily steps', this.margin + 14, this.currentY);
+        this.currentY += 5;
+      }
+
+      for (const step of sequence.dailySteps) {
+        this.ensureSpace(12);
+
+        // Step bullet
+        this.pdf.setFontSize(8);
+        this.pdf.setTextColor(...this.colors.text);
+        this.pdf.text('-', this.margin + 14, this.currentY);
+
+        // Step text
+        this.pdf.setFontSize(8);
+        this.pdf.text(step.description, this.margin + 19, this.currentY);
+
+        // Step time
+        const stepTime =
+          step.timeMinutes >= 60
+            ? `${Math.floor(step.timeMinutes / 60)}h ${step.timeMinutes % 60}m`
+            : `${step.timeMinutes}m`;
+
+        this.pdf.setFontSize(7);
+        this.pdf.setTextColor(...this.colors.textLight);
+        this.pdf.text(
+          stepTime,
+          this.pageWidth - this.margin,
+          this.currentY,
+          { align: 'right' }
+        );
+        this.currentY += 5;
+      }
+
+      this.currentY += 4;
+    }
+
+    /* ================================
+       GOAL SEPARATOR
+    ================================= */
+    this.currentY += 3;
+    this.pdf.setDrawColor(...this.colors.border);
+    this.pdf.setLineWidth(0.25);
+    this.pdf.line(
+      this.margin,
+      this.currentY,
+      this.pageWidth - this.margin,
+      this.currentY
+    );
+    this.currentY += 8;
+  }
+
+  this.addSimpleSummary(columns);
+}
+
+/* ================================
+   SAFE PAGE BREAK HELPER
+================================ */
+private ensureSpace(required: number): void {
+  if (this.currentY + required > this.pageHeight - this.margin) {
+    this.pdf.addPage();
+    this.currentY = this.margin;
+  }
+}
+
+
+ private addSimpleSummary(columns: IkioiColumnData[]): void {
+  if (columns.length === 0) return;
+
+  const totalSequences = columns.reduce((sum, col) => sum + col.sequences.length, 0);
+  const totalSteps = columns.reduce(
+    (sum, col) =>
+      sum + col.sequences.reduce((seqSum, seq) => seqSum + seq.dailySteps.length, 0),
+    0
+  );
+
+  const totalTimeMinutes = columns.reduce(
+    (sum, col) =>
+      sum +
+      col.sequences.reduce(
+        (seqSum, seq) =>
+          seqSum + seq.dailySteps.reduce((stepSum, step) => stepSum + step.timeMinutes, 0),
+        0
+      ),
+    0
+  );
+
+  const totalHours = Math.floor(totalTimeMinutes / 60);
+  const totalMinutes = totalTimeMinutes % 60;
+  const totalTime =
+    totalHours > 0 ? `${totalHours}h ${totalMinutes}m` : `${totalMinutes}m`;
+
+  const boxHeight = 36;
+  const boxY = this.currentY + 8;
+  const boxWidth = this.pageWidth - this.margin * 2;
+
+  /* ================================
+     BACKGROUND
+  ================================= */
+  this.pdf.setFillColor(...this.colors.background);
+  this.pdf.rect(this.margin, boxY, boxWidth, boxHeight, 'F');
+
+  /* ================================
+     TITLE
+  ================================= */
+  this.pdf.setFontSize(11);
+  this.pdf.setFont('helvetica', 'bold');
+  this.pdf.setTextColor(...this.colors.text);
+  this.pdf.text('Summary', this.margin + 10, boxY + 10);
+
+  /* ================================
+     LEFT COLUMN — COUNTS
+  ================================= */
+  const leftX = this.margin + 12;
+  const labelX = leftX;
+  const valueX = leftX + 45;
+
+  this.pdf.setFontSize(9);
+  this.pdf.setFont('helvetica', 'normal');
+  this.pdf.setTextColor(...this.colors.textLight);
+
+  this.pdf.text('Goals', labelX, boxY + 18);
+  this.pdf.text('Sequences', labelX, boxY + 24);
+  this.pdf.text('Daily Steps', labelX, boxY + 30);
+
+  this.pdf.setFont('helvetica', 'bold');
+  this.pdf.setTextColor(...this.colors.text);
+
+  this.pdf.text(String(columns.length), valueX, boxY + 18);
+  this.pdf.text(String(totalSequences), valueX, boxY + 24);
+  this.pdf.text(String(totalSteps), valueX, boxY + 30);
+
+  /* ================================
+     RIGHT COLUMN — TOTAL TIME
+  ================================= */
+  const rightX = this.pageWidth - this.margin - 12;
+
+  this.pdf.setFont('helvetica', 'normal');
+  this.pdf.setFontSize(9);
+  this.pdf.setTextColor(...this.colors.textLight);
+  this.pdf.text('Total Time', rightX, boxY + 18, { align: 'right' });
+
+  this.pdf.setFont('helvetica', 'bold');
+  this.pdf.setFontSize(14);
+  this.pdf.setTextColor(...this.colors.accent);
+  this.pdf.text(totalTime, rightX, boxY + 30, { align: 'right' });
+
+  this.currentY = boxY + boxHeight;
+}
+
 
   private addFooter(): void {
     const totalPages = this.pdf.getNumberOfPages();
@@ -553,50 +870,138 @@ async exportAsImage(
     for (let i = 1; i <= totalPages; i++) {
       this.pdf.setPage(i);
       
+      // Footer with light background
+      this.pdf.setFillColor(this.colors.background[0], this.colors.background[1], this.colors.background[2]);
+      this.pdf.rect(0, this.pageHeight - 12, this.pageWidth, 12, 'F');
+      
+      // Separator line
+      this.pdf.setDrawColor(this.colors.border[0], this.colors.border[1], this.colors.border[2]);
+      this.pdf.line(this.margin, this.pageHeight - 12, this.pageWidth - this.margin, this.pageHeight - 12);
+      
       this.pdf.setFontSize(8);
-      this.pdf.setTextColor(150, 150, 150);
+      this.pdf.setTextColor(this.colors.textLight[0], this.colors.textLight[1], this.colors.textLight[2]);
       
       // Page number
       this.pdf.text(
         `Page ${i} of ${totalPages}`,
         this.pageWidth - this.margin,
-        this.pageHeight - 10,
+        this.pageHeight - 5,
         { align: 'right' }
       );
       
-      // App name
+      // Copyright
       this.pdf.text(
-        'Ikioi • Mindful Momentum',
+        'Ikioi Productivity System',
         this.margin,
-        this.pageHeight - 10
+        this.pageHeight - 5
+      );
+      
+      // Export date
+      const exportDate = new Date().toLocaleDateString();
+      this.pdf.text(
+        exportDate,
+        this.pageWidth / 2,
+        this.pageHeight - 5,
+        { align: 'center' }
       );
     }
   }
 
-  private addTableRow(data: string[], colWidths: number[], rowIndex: number): void {
-    let x = this.margin;
+  private renderColumnCard(
+    column: IkioiColumnData,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): void {
+    // Card with subtle background
+    this.pdf.setFillColor(this.colors.background[0], this.colors.background[1], this.colors.background[2]);
+    this.pdf.roundedRect(x, y, width, height, 2, 2, 'F');
     
-    // Alternate row colors
-    if (rowIndex % 2 === 0) {
-      this.pdf.setFillColor(250, 250, 250);
-      this.pdf.rect(this.margin, this.currentY, this.pageWidth - (this.margin * 2), 8, 'F');
-    }
-
-    data.forEach((cell, i) => {
-      this.pdf.setFontSize(9);
-      this.pdf.setTextColor(0, 0, 0);
-      this.pdf.text(cell, x + 2, this.currentY + 5, { maxWidth: colWidths[i] - 4 });
-      x += colWidths[i];
+    // Category label with primary color
+    this.pdf.setFontSize(8);
+    this.pdf.setFont('helvetica', 'bold');
+    this.pdf.setTextColor(this.colors.primary[0], this.colors.primary[1], this.colors.primary[2]);
+    this.pdf.text(column.category || 'General', x + 5, y + 8);
+    
+    // Goal title
+    this.pdf.setFontSize(9);
+    this.pdf.setFont('helvetica', 'normal');
+    this.pdf.setTextColor(this.colors.text[0], this.colors.text[1], this.colors.text[2]);
+    const goalLines = this.wrapText(column.goal, width - 10);
+    goalLines.forEach((line, index) => {
+      this.pdf.text(line, x + 5, y + 20 + (index * 5));
     });
+    
+    // Stats
+    this.pdf.setFontSize(8);
+    this.pdf.setTextColor(this.colors.textLight[0], this.colors.textLight[1], this.colors.textLight[2]);
+    this.pdf.text(`Target Year: ${column.targetYear}`, x + 5, y + 35);
+    
+    const seqCount = column.sequences.length;
+    const stepCount = column.sequences.reduce((sum, seq) => sum + seq.dailySteps.length, 0);
+    this.pdf.text(`Steps: ${stepCount}`, x + width - 5, y + 35, { align: 'right' });
+    
+    // Preview first sequence if exists
+    if (column.sequences.length > 0) {
+      this.pdf.setDrawColor(this.colors.border[0], this.colors.border[1], this.colors.border[2]);
+      this.pdf.line(x, y + 40, x + width, y + 40);
+      
+      const firstSeq = column.sequences[0];
+      this.pdf.setFontSize(7);
+      
+      const seqText = firstSeq.description.length > 25 
+        ? firstSeq.description.substring(0, 22) + '...' 
+        : firstSeq.description;
+      
+      this.pdf.text(`• ${seqText}`, x + 5, y + 47);
+    }
+    
+    // Card border
+    this.pdf.setDrawColor(this.colors.border[0], this.colors.border[1], this.colors.border[2]);
+    this.pdf.roundedRect(x, y, width, height, 2, 2, 'D');
+  }
+
+  private addNoDataMessage(): void {
+    this.pdf.setFontSize(14);
+    this.pdf.setFont('helvetica', 'italic');
+    this.pdf.setTextColor(this.colors.textLighter[0], this.colors.textLighter[1], this.colors.textLighter[2]);
+    this.pdf.text('No goals to display', this.pageWidth / 2, this.currentY + 50, { align: 'center' });
+    
+    this.pdf.setFontSize(10);
+    this.pdf.text('Start by adding goals to your whiteboard', this.pageWidth / 2, this.currentY + 60, { align: 'center' });
   }
 
   private hexToRgb(hex: string): [number, number, number] {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? [
-      parseInt(result[1], 16),
-      parseInt(result[2], 16),
-      parseInt(result[3], 16)
-    ] : [186, 225, 255]; // Default color
+    // Remove # if present
+    const hexColor = hex.replace('#', '');
+    
+    // Parse the hex color
+    if (hexColor.length === 3) {
+      // Short hex notation (#RGB)
+      const r = parseInt(hexColor[0] + hexColor[0], 16);
+      const g = parseInt(hexColor[1] + hexColor[1], 16);
+      const b = parseInt(hexColor[2] + hexColor[2], 16);
+      return [r, g, b];
+    } else if (hexColor.length === 6) {
+      // Full hex notation (#RRGGBB)
+      const r = parseInt(hexColor.substring(0, 2), 16);
+      const g = parseInt(hexColor.substring(2, 4), 16);
+      const b = parseInt(hexColor.substring(4, 6), 16);
+      return [r, g, b];
+    }
+    
+    // Default sage green color if parsing fails
+    return [this.colors.primary[0], this.colors.primary[1], this.colors.primary[2]];
+  }
+
+  private getLevelLabel(level: string): string {
+    switch(level) {
+      case 'goal': return 'GOAL';
+      case 'sequence': return 'SEQ';
+      case 'step': return 'STEP';
+      default: return '';
+    }
   }
 
   private wrapText(text: string, maxWidth: number): string[] {
@@ -606,10 +1011,13 @@ async exportAsImage(
 
     for (let i = 1; i < words.length; i++) {
       const word = words[i];
-      const width = this.pdf.getStringUnitWidth(currentLine + ' ' + word) * this.pdf.getFontSize() / this.pdf.internal.scaleFactor;
+      const testLine = currentLine + ' ' + word;
       
-      if (width < maxWidth) {
-        currentLine += ' ' + word;
+      // Simple width estimation based on character count
+      const estimatedWidth = testLine.length * 2; // Rough estimation in mm
+      
+      if (estimatedWidth < maxWidth) {
+        currentLine = testLine;
       } else {
         lines.push(currentLine);
         currentLine = word;
@@ -617,6 +1025,6 @@ async exportAsImage(
     }
     
     lines.push(currentLine);
-    return lines;
+    return lines.slice(0, 3); // Limit to 3 lines max
   }
 }
